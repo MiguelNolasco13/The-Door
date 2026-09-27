@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#8A5A24">
+<link rel="manifest" href="manifest.json">
+<title>The Door</title>
+<style>
+:root{--wood:#6f421f;--wood2:#9a6833;--mustard:#d6a928;--cream:#f7f1e7;--dark:#2f2118;--white:#fff;--green:#47734b}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:var(--cream);color:var(--dark)}
+header{background:linear-gradient(135deg,var(--wood),var(--wood2));color:#fff;padding:18px 18px 22px;position:sticky;top:0;z-index:5;box-shadow:0 3px 12px #0002}
+.brand{font-size:27px;font-weight:800}.subtitle{opacity:.85;font-size:13px}
+nav{display:flex;gap:7px;overflow:auto;margin-top:16px}nav button{border:0;background:#ffffff1c;color:#fff;padding:10px 13px;border-radius:22px;white-space:nowrap}
+nav button.active{background:var(--mustard);color:var(--dark);font-weight:bold}
+main{max-width:1050px;margin:auto;padding:18px}.view{display:none}.view.active{display:block}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.card{background:#fff;border-radius:16px;padding:17px;box-shadow:0 3px 12px #5a351d18}.num{font-size:28px;font-weight:800;color:var(--wood)}.label{font-size:13px;color:#765f4d}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:15px 0}.btn{border:0;border-radius:12px;padding:12px 16px;background:var(--wood);color:#fff;font-weight:700;cursor:pointer}.btn.yellow{background:var(--mustard);color:var(--dark)}.btn.outline{background:#fff;color:var(--wood);border:1px solid #d5c3ad}
+.panel{background:#fff;border-radius:16px;padding:18px;box-shadow:0 3px 12px #5a351d18;margin-top:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}label{font-size:12px;font-weight:700;color:#765f4d}input,select,textarea{width:100%;margin-top:5px;padding:12px;border:1px solid #dccbb7;border-radius:10px;background:#fff;font-size:15px}form{display:grid;gap:12px}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:11px 8px;border-bottom:1px solid #eee}th{color:var(--wood)}
+.badge{padding:5px 9px;border-radius:20px;font-size:11px;font-weight:700}.pending{background:#fff1bf;color:#745500}.done{background:#dcebdc;color:#315934}
+.actions{display:flex;gap:6px;flex-wrap:wrap}.small{padding:8px 10px;font-size:12px}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--dark);color:#fff;padding:12px 18px;border-radius:25px;display:none;z-index:20}
+.modal{display:none;position:fixed;inset:0;background:#0008;z-index:10;align-items:center;justify-content:center;padding:18px}.modal.open{display:flex}.modalbox{background:#fff;border-radius:18px;padding:20px;max-width:430px;width:100%;text-align:center}.qr{width:240px;height:240px;object-fit:contain;margin:10px auto}
+.empty{text-align:center;padding:30px;color:#806c59}
+@media(max-width:600px){main{padding:12px}th:nth-child(3),td:nth-child(3){display:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">🚪 The Door</div><div class="subtitle">Gestão de encomendas do condomínio</div>
+  <nav>
+    <button class="active" data-view="inicio">Início</button><button data-view="encomendas">Encomendas</button>
+    <button data-view="moradores">Moradores</button><button data-view="historico">Histórico</button><button data-view="config">Cadastros</button>
+  </nav>
+</header>
+<main>
+<section id="inicio" class="view active">
+<h2>Painel da Portaria</h2>
+<div class="cards">
+<div class="card"><div class="num" id="total">0</div><div class="label">Encomendas registradas</div></div>
+<div class="card"><div class="num" id="pendentes">0</div><div class="label">Aguardando retirada</div></div>
+<div class="card"><div class="num" id="retiradas">0</div><div class="label">Retiradas</div></div>
+<div class="card"><div class="num" id="moradoresTotal">0</div><div class="label">Moradores cadastrados</div></div>
+</div>
+<div class="toolbar"><button class="btn yellow" onclick="show('encomendas');openForm()">＋ Nova encomenda</button><button class="btn" onclick="show('encomendas');startScanner()">▣ Ler QR Code</button></div>
+<div class="panel"><h3>Últimas encomendas</h3><div id="recent"></div></div>
+</section>
+
+<section id="encomendas" class="view">
+<h2>Encomendas</h2><div class="toolbar"><button class="btn yellow" onclick="openForm()">＋ Adicionar encomenda</button><button class="btn" onclick="startScanner()">▣ Leitor QR</button></div>
+<div class="panel"><div id="packageList"></div></div>
+</section>
+
+<section id="moradores" class="view">
+<h2>Moradores</h2><div class="toolbar"><button class="btn yellow" onclick="openResidentForm()">＋ Cadastrar morador</button></div>
+<div class="panel"><div id="residentList"></div></div>
+</section>
+
+<section id="historico" class="view">
+<h2>Histórico</h2><div class="panel"><div id="historyList"></div></div>
+</section>
+
+<section id="config" class="view">
+<h2>Cadastros do condomínio</h2>
+<div class="panel"><p>Cadastre moradores com <b>bloco, rua, quadra e apartamento</b>. Esses dados ficam salvos neste aparelho.</p>
+<div class="toolbar"><button class="btn yellow" onclick="openResidentForm()">＋ Novo morador</button></div>
+</div>
+</section>
+</main>
+
+<div class="modal" id="modal"><div class="modalbox"><div id="modalContent"></div></div></div>
+<div id="toast"></div>
+
+<script>
+const K={res:'td_residents',pkg:'td_packages'};
+let residents=JSON.parse(localStorage.getItem(K.res)||'[]');
+let packages=JSON.parse(localStorage.getItem(K.pkg)||'[]');
+
+const save=()=>{localStorage.setItem(K.res,JSON.stringify(residents));localStorage.setItem(K.pkg,JSON.stringify(packages));render()};
+const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+function toast(t){let x=document.getElementById('toast');x.textContent=t;x.style.display='block';setTimeout(()=>x.style.display='none',2200)}
+function show(v){document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));document.getElementById(v).classList.add('active');document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));render()}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.view));
+
+function openForm(){
+ if(!residents.length){toast('Cadastre um morador primeiro.');show('moradores');return}
+ modal.classList.add('open');
+ modalContent.innerHTML=`<h2>Nova encomenda</h2><form id="pkgForm">
+<label>Morador<select id="resident" required>${residents.map(r=>`<option value="${r.id}">${esc(r.nome)} — ${esc(r.bloco)} / ${esc(r.apto)}</option>`).join('')}</select></label>
+<div class="grid"><label>Transportadora / entregador<input id="entregador" placeholder="Ex.: Mercado Livre"></label><label>Código/rastreio<input id="codigo" placeholder="Opcional"></label></div>
+<label>Observações<textarea id="obs" placeholder="Ex.: caixa grande, frágil..."></textarea></label>
+<div class="actions"><button class="btn yellow">Registrar e gerar QR</button><button type="button" class="btn outline" onclick="closeModal()">Cancelar</button></div></form>`;
+ pkgForm.onsubmit=e=>{e.preventDefault();let r=residents.find(x=>x.id===resident.value);let p={id:crypto.randomUUID(),residentId:r.id,entregador:entregador.value,codigo:codigo.value,obs:obs.value,status:'Pendente',created:new Date().toISOString(),picked:null};packages.unshift(p);save();closeModal();showQR(p)};
+}
+function openResidentForm(){
+ modal.classList.add('open');modalContent.innerHTML=`<h2>Novo morador</h2><form id="resForm">
+<label>Nome completo<input id="nome" required></label><div class="grid">
+<label>Bloco<input id="bloco" required></label><label>Rua<input id="rua" required></label><label>Quadra<input id="quadra" required></label><label>Apartamento<input id="apto" required></label>
+</div><label>WhatsApp (com DDD)<input id="whatsapp" placeholder="Ex.: 5511999999999"></label>
+<div class="actions"><button class="btn yellow">Salvar morador</button><button type="button" class="btn outline" onclick="closeModal()">Cancelar</button></div></form>`;
+ resForm.onsubmit=e=>{e.preventDefault();residents.push({id:crypto.randomUUID(),nome:nome.value,bloco:bloco.value,rua:rua.value,quadra:quadra.value,apto:apto.value,whatsapp:whatsapp.value});save();closeModal();toast('Morador cadastrado!')};
+}
+function closeModal(){modal.classList.remove('open')}
+function residentOf(p){return residents.find(r=>r.id===p.residentId)||{nome:'Morador removido',bloco:'-',apto:'-'}}
+function showQR(p){
+ let r=residentOf(p);let data=encodeURIComponent(JSON.stringify({app:'TheDoor',id:p.id}));
+ modal.classList.add('open');modalContent.innerHTML=`<h2>QR Code da encomenda</h2><p><b>${esc(r.nome)}</b><br>${esc(r.bloco)} • Apto ${esc(r.apto)}</p>
+<img class="qr" src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${data}" alt="QR Code">
+<p style="font-size:12px">O morador pode apresentar este QR Code para retirada.</p>
+<div class="actions"><button class="btn yellow" onclick="sendWhatsApp('${r.whatsapp}','${p.id}')">Enviar pelo WhatsApp</button><button class="btn outline" onclick="closeModal()">Fechar</button></div>`;
+}
+function sendWhatsApp(number,id){if(!number){toast('Cadastre o WhatsApp do morador.');return}let msg=encodeURIComponent(`Olá, ${residentOf(packages.find(p=>p.id===id)).nome}! Sua encomenda está disponível para retirada na portaria do condomínio. Código: ${id}`);window.open(`https://wa.me/${number.replace(/\D/g,'')}?text=${msg}`,'_blank')}
+function markPicked(id){let p=packages.find(x=>x.id===id);if(!p)return;if(p.status==='Retirada')return;p.status='Retirada';p.picked=new Date().toISOString();save();toast('Encomenda baixada com sucesso!')}
+function delPackage(id){if(confirm('Excluir esta encomenda?')){packages=packages.filter(p=>p.id!==id);save();toast('Encomenda excluída.')}}
+function delResident(id){if(packages.some(p=>p.residentId===id&&p.status==='Pendente')){toast('Não é possível excluir: há encomenda pendente.');return}if(confirm('Excluir morador?')){residents=residents.filter(r=>r.id!==id);save()}}
+function fmt(d){return new Date(d).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}
+function render(){
+ total.textContent=packages.length;pendentes.textContent=packages.filter(p=>p.status==='Pendente').length;retiradas.textContent=packages.filter(p=>p.status==='Retirada').length;moradoresTotal.textContent=residents.length;
+ const rows=packages.map(p=>{let r=residentOf(p);return `<tr><td><b>${esc(r.nome)}</b><br>${esc(r.bloco)} • ${esc(r.rua)} • Q${esc(r.quadra)} • Apto ${esc(r.apto)}</td><td>${esc(p.entregador||'-')}<br><small>${fmt(p.created)}</small></td><td><span class="badge ${p.status==='Retirada'?'done':'pending'}">${p.status}</span></td><td class="actions">${p.status==='Pendente'?`<button class="btn small" onclick="markPicked('${p.id}')">Dar baixa</button><button class="btn yellow small" onclick="showQR(packages.find(x=>x.id==='${p.id}'))">QR</button>`:''}<button class="btn outline small" onclick="delPackage('${p.id}')">Excluir</button></td></tr>`}).join('');
+ packageList.innerHTML=rows?`<div style="overflow:auto"><table><tr><th>Morador</th><th>Entregador</th><th>Status</th><th>Ações</th></tr>${rows}</table></div>`:'<div class="empty">Nenhuma encomenda registrada.</div>';
+ historyList.innerHTML=packages.length?`<div style="overflow:auto"><table><tr><th>Morador</th><th>Entrada</th><th>Retirada</th><th>Status</th></tr>${packages.map(p=>{let r=residentOf(p);return `<tr><td>${esc(r.nome)}<br>${esc(r.bloco)} / ${esc(r.apto)}</td><td>${fmt(p.created)}</td><td>${p.picked?fmt(p.picked):'-'}</td><td>${p.status}</td></tr>`}).join('')}</table></div>`:'<div class="empty">Histórico vazio.</div>';
+ residentList.innerHTML=residents.length?`<div style="overflow:auto"><table><tr><th>Morador</th><th>Endereço</th><th>WhatsApp</th><th></th></tr>${residents.map(r=>`<tr><td><b>${esc(r.nome)}</b></td><td>${esc(r.bloco)} • ${esc(r.rua)} • Q${esc(r.quadra)} • Apto ${esc(r.apto)}</td><td>${esc(r.whatsapp||'-')}</td><td><button class="btn outline small" onclick="delResident('${r.id}')">Excluir</button></td></tr>`).join('')}</table></div>`:'<div class="empty">Nenhum morador cadastrado.</div>';
+ recent.innerHTML=packages.slice(0,5).map(p=>{let r=residentOf(p);return `<p><b>${esc(r.nome)}</b> — ${esc(r.bloco)}/${esc(r.apto)} <span class="badge ${p.status==='Retirada'?'done':'pending'}">${p.status}</span></p>`}).join('')||'<div class="empty">Nenhuma encomenda ainda.</div>';
+}
+async function startScanner(){
+ modal.classList.add('open');modalContent.innerHTML=`<h2>Leitor QR Code</h2><video id="video" style="width:100%;border-radius:14px;background:#111" autoplay playsinline></video><p id="scanMsg">Aponte a câmera para o QR Code.</p><button class="btn outline" onclick="stopScanner()">Fechar</button>`;
+ try{let stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});video.srcObject=stream;
+ if('BarcodeDetector' in window){let detector=new BarcodeDetector({formats:['qr_code']});let timer=setInterval(async()=>{if(modal.classList.contains('open')&&video.readyState>=2){let codes=await detector.detect(video);if(codes.length){clearInterval(timer);let raw=codes[0].rawValue;try{let d=JSON.parse(raw);let p=packages.find(x=>x.id===d.id);stopScanner();if(p){markPicked(p.id)}else toast('QR Code não encontrado.')}}}},500);video.dataset.timer='1'}else scanMsg.textContent='Seu navegador não oferece leitura QR nativa. Use um leitor QR do aparelho ou abra no Chrome atualizado.'}
+ catch(e){scanMsg.textContent='Permissão de câmera não concedida.'}
+}
+function stopScanner(){if(video?.srcObject){video.srcObject.getTracks().forEach(t=>t.stop())}closeModal()}
+render();
+</script>
+</body>
+</html>
