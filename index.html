@@ -95,7 +95,7 @@ function openForm(){
 <div class="grid"><label>Transportadora / entregador<input id="entregador" placeholder="Ex.: Mercado Livre"></label><label>Código/rastreio<input id="codigo" placeholder="Opcional"></label></div>
 <label>Observações<textarea id="obs" placeholder="Ex.: caixa grande, frágil..."></textarea></label>
 <div class="actions"><button class="btn yellow">Registrar e gerar QR</button><button type="button" class="btn outline" onclick="closeModal()">Cancelar</button></div></form>`;
- pkgForm.onsubmit=e=>{e.preventDefault();let r=residents.find(x=>x.id===resident.value);let p={id:uid(),residentId:r.id,entregador:entregador.value,codigo:codigo.value,obs:obs.value,status:'Pendente',created:new Date().toISOString(),picked:null};packages.unshift(p);save();closeModal();showQR(p)};
+ document.getElementById('pkgForm').onsubmit=e=>{e.preventDefault();let r=residents.find(x=>x.id===document.getElementById('resident').value);let p={id:uid(),residentId:r.id,entregador:document.getElementById('entregador').value,codigo:document.getElementById('codigo').value,obs:document.getElementById('obs').value,status:'Pendente',created:new Date().toISOString(),picked:null};packages.unshift(p);save();closeModal();showQR(p)};
 }
 function openResidentForm(){
  modal.classList.add('open');modalContent.innerHTML=`<h2>Novo morador</h2><form id="resForm">
@@ -103,7 +103,7 @@ function openResidentForm(){
 <label>Bloco<input id="bloco" required></label><label>Rua<input id="rua" required></label><label>Quadra<input id="quadra" required></label><label>Apartamento<input id="apto" required></label>
 </div><label>WhatsApp (com DDD)<input id="whatsapp" placeholder="Ex.: 5511999999999"></label>
 <div class="actions"><button class="btn yellow">Salvar morador</button><button type="button" class="btn outline" onclick="closeModal()">Cancelar</button></div></form>`;
- resForm.onsubmit=e=>{e.preventDefault();residents.push({id:uid(),nome:nome.value,bloco:bloco.value,rua:rua.value,quadra:quadra.value,apto:apto.value,whatsapp:whatsapp.value});save();closeModal();toast('Morador cadastrado!')};
+ document.getElementById('resForm').onsubmit=e=>{e.preventDefault();residents.push({id:uid(),nome:document.getElementById('nome').value,bloco:document.getElementById('bloco').value,rua:document.getElementById('rua').value,quadra:document.getElementById('quadra').value,apto:document.getElementById('apto').value,whatsapp:document.getElementById('whatsapp').value});save();closeModal();toast('Morador cadastrado!')};
 }
 function closeModal(){modal.classList.remove('open')}
 function residentOf(p){return residents.find(r=>r.id===p.residentId)||{nome:'Morador removido',bloco:'-',apto:'-'}}
@@ -130,7 +130,7 @@ function render(){
 async function startScanner(){
  modal.classList.add('open');modalContent.innerHTML=`<h2>Leitor QR Code</h2><video id="video" style="width:100%;border-radius:14px;background:#111" autoplay playsinline></video><p id="scanMsg">Aponte a câmera para o QR Code.</p><button class="btn outline" onclick="stopScanner()">Fechar</button>`;
  try{let stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});$('video').srcObject=stream;
- if('BarcodeDetector' in window){let detector=new BarcodeDetector({formats:['qr_code']});let timer=setInterval(async()=>{if(modal.classList.contains('open')&&$('video').readyState>=2){let codes=await detector.detect($('video'));if(codes.length){clearInterval(timer);let raw=codes[0].rawValue;try{let d=JSON.parse(raw);let p=packages.find(x=>x.id===d.id);stopScanner();if(p){markPicked(p.id)}else toast('QR Code não encontrado.')}}}},500);video.dataset.timer='1'}else $('scanMsg').textContent='Seu navegador não oferece leitura QR nativa. Use um leitor QR do aparelho ou abra no Chrome atualizado.'}
+ if('BarcodeDetector' in window){let detector=new BarcodeDetector({formats:['qr_code']});let timer=setInterval(async()=>{if(modal.classList.contains('open')&&$('video').readyState>=2){let codes=await detector.detect($('video'));if(codes.length){clearInterval(timer);let raw=codes[0].rawValue;try{let d=JSON.parse(raw);let p=packages.find(x=>x.id===d.id);stopScanner();if(p){markPicked(p.id)}else toast('QR Code não encontrado.')}}}},500);document.getElementById('video').dataset.timer='1'}else $('scanMsg').textContent='Seu navegador não oferece leitura QR nativa. Use um leitor QR do aparelho ou abra no Chrome atualizado.'}
  catch(e){$('scanMsg').textContent='Permissão de câmera não concedida.'}
 }
 function stopScanner(){if($('video')?.srcObject){$('video').srcObject.getTracks().forEach(t=>t.stop())}closeModal()}
