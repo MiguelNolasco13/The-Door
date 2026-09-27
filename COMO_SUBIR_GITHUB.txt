@@ -1,0 +1,19 @@
+THE DOOR - COMO SUBIR NO GITHUB
+
+1. Extraia este ZIP.
+2. Entre no repositório The-Door no GitHub.
+3. Clique em Add file > Upload files.
+4. Envie index.html, manifest.json e sw.js diretamente na raiz do repositório.
+5. Clique em Commit changes.
+6. Vá em Settings > Pages.
+7. Source: Deploy from a branch.
+8. Branch: main / root.
+9. Save.
+10. Aguarde alguns minutos e abra:
+https://SEUUSUARIO.github.io/The-Door/
+
+IMPORTANTE:
+- O arquivo index.html deve ficar diretamente na raiz.
+- Os dados desta versão ficam salvos no navegador do aparelho.
+- O QR Code é gerado por um serviço online.
+- Para leitura de QR pela câmera, use o link HTTPS do GitHub Pages e permita a câmera.
