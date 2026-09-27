@@ -77,10 +77,13 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;p
 const K={res:'td_residents',pkg:'td_packages'};
 let residents=JSON.parse(localStorage.getItem(K.res)||'[]');
 let packages=JSON.parse(localStorage.getItem(K.pkg)||'[]');
+const $=id=>document.getElementById(id);
+const uid=()=>('xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx').replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&3|8);return v.toString(16)});
+const modal=$('modal'), modalContent=$('modalContent');
 
 const save=()=>{localStorage.setItem(K.res,JSON.stringify(residents));localStorage.setItem(K.pkg,JSON.stringify(packages));render()};
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-function toast(t){let x=document.getElementById('toast');x.textContent=t;x.style.display='block';setTimeout(()=>x.style.display='none',2200)}
+function toast(t){let x=$('toast');x.textContent=t;x.style.display='block';setTimeout(()=>x.style.display='none',2200)}
 function show(v){document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));document.getElementById(v).classList.add('active');document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));render()}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.view));
 
@@ -92,7 +95,7 @@ function openForm(){
 <div class="grid"><label>Transportadora / entregador<input id="entregador" placeholder="Ex.: Mercado Livre"></label><label>Código/rastreio<input id="codigo" placeholder="Opcional"></label></div>
 <label>Observações<textarea id="obs" placeholder="Ex.: caixa grande, frágil..."></textarea></label>
 <div class="actions"><button class="btn yellow">Registrar e gerar QR</button><button type="button" class="btn outline" onclick="closeModal()">Cancelar</button></div></form>`;
- pkgForm.onsubmit=e=>{e.preventDefault();let r=residents.find(x=>x.id===resident.value);let p={id:crypto.randomUUID(),residentId:r.id,entregador:entregador.value,codigo:codigo.value,obs:obs.value,status:'Pendente',created:new Date().toISOString(),picked:null};packages.unshift(p);save();closeModal();showQR(p)};
+ pkgForm.onsubmit=e=>{e.preventDefault();let r=residents.find(x=>x.id===resident.value);let p={id:uid(),residentId:r.id,entregador:entregador.value,codigo:codigo.value,obs:obs.value,status:'Pendente',created:new Date().toISOString(),picked:null};packages.unshift(p);save();closeModal();showQR(p)};
 }
 function openResidentForm(){
  modal.classList.add('open');modalContent.innerHTML=`<h2>Novo morador</h2><form id="resForm">
@@ -100,7 +103,7 @@ function openResidentForm(){
 <label>Bloco<input id="bloco" required></label><label>Rua<input id="rua" required></label><label>Quadra<input id="quadra" required></label><label>Apartamento<input id="apto" required></label>
 </div><label>WhatsApp (com DDD)<input id="whatsapp" placeholder="Ex.: 5511999999999"></label>
 <div class="actions"><button class="btn yellow">Salvar morador</button><button type="button" class="btn outline" onclick="closeModal()">Cancelar</button></div></form>`;
- resForm.onsubmit=e=>{e.preventDefault();residents.push({id:crypto.randomUUID(),nome:nome.value,bloco:bloco.value,rua:rua.value,quadra:quadra.value,apto:apto.value,whatsapp:whatsapp.value});save();closeModal();toast('Morador cadastrado!')};
+ resForm.onsubmit=e=>{e.preventDefault();residents.push({id:uid(),nome:nome.value,bloco:bloco.value,rua:rua.value,quadra:quadra.value,apto:apto.value,whatsapp:whatsapp.value});save();closeModal();toast('Morador cadastrado!')};
 }
 function closeModal(){modal.classList.remove('open')}
 function residentOf(p){return residents.find(r=>r.id===p.residentId)||{nome:'Morador removido',bloco:'-',apto:'-'}}
@@ -117,20 +120,20 @@ function delPackage(id){if(confirm('Excluir esta encomenda?')){packages=packages
 function delResident(id){if(packages.some(p=>p.residentId===id&&p.status==='Pendente')){toast('Não é possível excluir: há encomenda pendente.');return}if(confirm('Excluir morador?')){residents=residents.filter(r=>r.id!==id);save()}}
 function fmt(d){return new Date(d).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}
 function render(){
- total.textContent=packages.length;pendentes.textContent=packages.filter(p=>p.status==='Pendente').length;retiradas.textContent=packages.filter(p=>p.status==='Retirada').length;moradoresTotal.textContent=residents.length;
+ $('total').textContent=packages.length;$('pendentes').textContent=packages.filter(p=>p.status==='Pendente').length;$('retiradas').textContent=packages.filter(p=>p.status==='Retirada').length;$('moradoresTotal').textContent=residents.length;
  const rows=packages.map(p=>{let r=residentOf(p);return `<tr><td><b>${esc(r.nome)}</b><br>${esc(r.bloco)} • ${esc(r.rua)} • Q${esc(r.quadra)} • Apto ${esc(r.apto)}</td><td>${esc(p.entregador||'-')}<br><small>${fmt(p.created)}</small></td><td><span class="badge ${p.status==='Retirada'?'done':'pending'}">${p.status}</span></td><td class="actions">${p.status==='Pendente'?`<button class="btn small" onclick="markPicked('${p.id}')">Dar baixa</button><button class="btn yellow small" onclick="showQR(packages.find(x=>x.id==='${p.id}'))">QR</button>`:''}<button class="btn outline small" onclick="delPackage('${p.id}')">Excluir</button></td></tr>`}).join('');
- packageList.innerHTML=rows?`<div style="overflow:auto"><table><tr><th>Morador</th><th>Entregador</th><th>Status</th><th>Ações</th></tr>${rows}</table></div>`:'<div class="empty">Nenhuma encomenda registrada.</div>';
- historyList.innerHTML=packages.length?`<div style="overflow:auto"><table><tr><th>Morador</th><th>Entrada</th><th>Retirada</th><th>Status</th></tr>${packages.map(p=>{let r=residentOf(p);return `<tr><td>${esc(r.nome)}<br>${esc(r.bloco)} / ${esc(r.apto)}</td><td>${fmt(p.created)}</td><td>${p.picked?fmt(p.picked):'-'}</td><td>${p.status}</td></tr>`}).join('')}</table></div>`:'<div class="empty">Histórico vazio.</div>';
- residentList.innerHTML=residents.length?`<div style="overflow:auto"><table><tr><th>Morador</th><th>Endereço</th><th>WhatsApp</th><th></th></tr>${residents.map(r=>`<tr><td><b>${esc(r.nome)}</b></td><td>${esc(r.bloco)} • ${esc(r.rua)} • Q${esc(r.quadra)} • Apto ${esc(r.apto)}</td><td>${esc(r.whatsapp||'-')}</td><td><button class="btn outline small" onclick="delResident('${r.id}')">Excluir</button></td></tr>`).join('')}</table></div>`:'<div class="empty">Nenhum morador cadastrado.</div>';
- recent.innerHTML=packages.slice(0,5).map(p=>{let r=residentOf(p);return `<p><b>${esc(r.nome)}</b> — ${esc(r.bloco)}/${esc(r.apto)} <span class="badge ${p.status==='Retirada'?'done':'pending'}">${p.status}</span></p>`}).join('')||'<div class="empty">Nenhuma encomenda ainda.</div>';
+ $('packageList').innerHTML=rows?`<div style="overflow:auto"><table><tr><th>Morador</th><th>Entregador</th><th>Status</th><th>Ações</th></tr>${rows}</table></div>`:'<div class="empty">Nenhuma encomenda registrada.</div>';
+ $('historyList').innerHTML=packages.length?`<div style="overflow:auto"><table><tr><th>Morador</th><th>Entrada</th><th>Retirada</th><th>Status</th></tr>${packages.map(p=>{let r=residentOf(p);return `<tr><td>${esc(r.nome)}<br>${esc(r.bloco)} / ${esc(r.apto)}</td><td>${fmt(p.created)}</td><td>${p.picked?fmt(p.picked):'-'}</td><td>${p.status}</td></tr>`}).join('')}</table></div>`:'<div class="empty">Histórico vazio.</div>';
+ $('residentList').innerHTML=residents.length?`<div style="overflow:auto"><table><tr><th>Morador</th><th>Endereço</th><th>WhatsApp</th><th></th></tr>${residents.map(r=>`<tr><td><b>${esc(r.nome)}</b></td><td>${esc(r.bloco)} • ${esc(r.rua)} • Q${esc(r.quadra)} • Apto ${esc(r.apto)}</td><td>${esc(r.whatsapp||'-')}</td><td><button class="btn outline small" onclick="delResident('${r.id}')">Excluir</button></td></tr>`).join('')}</table></div>`:'<div class="empty">Nenhum morador cadastrado.</div>';
+ $('recent').innerHTML=packages.slice(0,5).map(p=>{let r=residentOf(p);return `<p><b>${esc(r.nome)}</b> — ${esc(r.bloco)}/${esc(r.apto)} <span class="badge ${p.status==='Retirada'?'done':'pending'}">${p.status}</span></p>`}).join('')||'<div class="empty">Nenhuma encomenda ainda.</div>';
 }
 async function startScanner(){
  modal.classList.add('open');modalContent.innerHTML=`<h2>Leitor QR Code</h2><video id="video" style="width:100%;border-radius:14px;background:#111" autoplay playsinline></video><p id="scanMsg">Aponte a câmera para o QR Code.</p><button class="btn outline" onclick="stopScanner()">Fechar</button>`;
- try{let stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});video.srcObject=stream;
- if('BarcodeDetector' in window){let detector=new BarcodeDetector({formats:['qr_code']});let timer=setInterval(async()=>{if(modal.classList.contains('open')&&video.readyState>=2){let codes=await detector.detect(video);if(codes.length){clearInterval(timer);let raw=codes[0].rawValue;try{let d=JSON.parse(raw);let p=packages.find(x=>x.id===d.id);stopScanner();if(p){markPicked(p.id)}else toast('QR Code não encontrado.')}}}},500);video.dataset.timer='1'}else scanMsg.textContent='Seu navegador não oferece leitura QR nativa. Use um leitor QR do aparelho ou abra no Chrome atualizado.'}
- catch(e){scanMsg.textContent='Permissão de câmera não concedida.'}
+ try{let stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});$('video').srcObject=stream;
+ if('BarcodeDetector' in window){let detector=new BarcodeDetector({formats:['qr_code']});let timer=setInterval(async()=>{if(modal.classList.contains('open')&&$('video').readyState>=2){let codes=await detector.detect($('video'));if(codes.length){clearInterval(timer);let raw=codes[0].rawValue;try{let d=JSON.parse(raw);let p=packages.find(x=>x.id===d.id);stopScanner();if(p){markPicked(p.id)}else toast('QR Code não encontrado.')}}}},500);video.dataset.timer='1'}else $('scanMsg').textContent='Seu navegador não oferece leitura QR nativa. Use um leitor QR do aparelho ou abra no Chrome atualizado.'}
+ catch(e){$('scanMsg').textContent='Permissão de câmera não concedida.'}
 }
-function stopScanner(){if(video?.srcObject){video.srcObject.getTracks().forEach(t=>t.stop())}closeModal()}
+function stopScanner(){if($('video')?.srcObject){$('video').srcObject.getTracks().forEach(t=>t.stop())}closeModal()}
 render();
 </script>
 </body>

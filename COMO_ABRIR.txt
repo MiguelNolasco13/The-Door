@@ -1,0 +1,8 @@
+THE DOOR - COMO ABRIR
+
+1. Extraia esta pasta.
+2. Abra o arquivo index.html com Google Chrome.
+3. Se aparecer uma tela branca, clique com o botão direito em index.html > Abrir com > Google Chrome.
+4. Para usar a câmera do QR Code no celular, publique esta pasta em um site HTTPS (por exemplo GitHub Pages).
+
+IMPORTANTE: os dados ficam salvos neste navegador/aparelho. Esta versão é para teste. Para uso compartilhado entre computadores e celulares, é necessário conectar um banco de dados online.
