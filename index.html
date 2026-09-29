@@ -95,7 +95,7 @@ small.code{word-break:break-all;color:#765}
 <div id="packageResidentsBox" class="unitbox"><span class="muted">Digite o bloco e escolha a unidade.</span></div>
 <div id="photoPreviewWrap" style="display:none;margin-top:12px"><label>Foto da encomenda</label><img id="photoPreview" class="photoBig" alt="Foto"></div>
 <input id="pFoto" type="file" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto(event)">
-<div class="actions"><button class="primary" onclick="openPackageCamera()">📷 Tirar foto e cadastrar</button><button class="gray" onclick="choosePackagePhoto()">🖼️ Escolher foto</button><button class="gray" onclick="resetPackageForm()">Limpar</button></div></div>
+<div class="actions"><button class="primary" onclick="openPackageCamera()">📷 Tirar foto</button><button class="gold" onclick="registerPackageAndSendQR()">✅ Registrar encomenda e enviar QR</button><button class="gray" onclick="choosePackagePhoto()">🖼️ Escolher foto</button><button class="gray" onclick="resetPackageForm()">Limpar</button></div></div>
 <div class="card"><h2>Encomendas pendentes</h2><input class="search" id="searchPkg" placeholder="Pesquisar bloco, apartamento, morador, descrição ou código" oninput="renderPackages()"><div id="packageList"></div></div>
 </section>
 
@@ -108,7 +108,7 @@ small.code{word-break:break-all;color:#765}
 
 <div class="modal" id="qrModal"><div class="box">
 <h2>QR Code da encomenda</h2><img id="qrImg" alt="QR Code">
-<p id="qrText"></p><p class="muted">No celular, toque em <b>📤 Enviar QR</b> e escolha o WhatsApp. Se essa opção não aparecer, use <b>⬇️ Baixar QR</b> e anexe a imagem manualmente.</p>
+<p id="qrText"></p><p class="muted">Ao registrar a encomenda, o The Door tenta abrir o compartilhamento do QR Code com a mensagem para o morador. No Android, selecione o WhatsApp. Se o aparelho não permitir compartilhar a imagem, use <b>📤 Enviar QR</b> ou <b>⬇️ Baixar QR</b>.</p>
 <div class="actions" style="justify-content:center"><button class="gold" onclick="shareQR()">📤 Enviar QR</button><button class="gray" onclick="downloadQR()">⬇️ Baixar QR</button><button class="gray" onclick="sendWhatsText()">💬 WhatsApp</button><button class="gray" onclick="closeModal('qrModal')">Fechar</button></div>
 </div></div>
 
@@ -159,8 +159,11 @@ function renderCouriers(){let q=(searchEnt.value||'').toLowerCase();let arr=cour
 function resetPackageForm(){pBloco.value='';pUnidade.innerHTML='<option value="">Digite o bloco primeiro</option>';pMorador.innerHTML='<option value="">Selecione a unidade primeiro</option>';pEntregador.value='';pDesc.value='';pFoto.value='';photoPreviewWrap.style.display='none';packageResidentsBox.innerHTML='<span class="muted">Digite o bloco e escolha a unidade.</span>'}
 function choosePackagePhoto(){pFoto.click()}
 function openPackageCamera(){pFoto.click()}
+function choosePackagePhoto(){pFoto.removeAttribute('capture');pFoto.click();setTimeout(()=>pFoto.setAttribute('capture','environment'),0)}
 function previewPhoto(ev){let f=ev.target.files?.[0];if(!f)return;let r=new FileReader();r.onload=()=>{photoPreview.src=r.result;photoPreviewWrap.style.display='block'};r.readAsDataURL(f)}
-function savePackage(){let uidu=pUnidade.value,rid=pMorador.value,eid=pEntregador.value,f=pFoto.files?.[0];if(!uidu)return toast('Informe bloco e unidade.');if(!rid)return toast('Selecione o morador.');if(!eid)return toast('Selecione o entregador.');if(!f)return toast('Tire a foto primeiro.');let r=new FileReader();r.onload=()=>{packages.unshift({id:uid(),codigo:'TD-'+Date.now().toString(36).toUpperCase(),unidadeId:uidu,moradorId:rid,entregadorId:eid,desc:pDesc.value.trim(),foto:r.result,entrada:new Date().toLocaleString('pt-BR'),status:'Pendente',retirada:null});save();resetPackageForm();toast('Encomenda enviada para Pendentes.');go('encomendas')};r.readAsDataURL(f)}
+function buildPackageFromForm(){let uidu=pUnidade.value,rid=pMorador.value,eid=pEntregador.value,f=pFoto.files?.[0];if(!uidu){toast('Informe o bloco e selecione a unidade.');return null}if(!rid){toast('Selecione o morador.');return null}if(!eid){toast('Selecione o entregador.');return null}if(!f){toast('Tire ou escolha a foto da encomenda.');return null}let u=units.find(x=>x.id===uidu),r=(u?.residents||[]).find(x=>x.id===rid);if(!r){toast('Morador não encontrado.');return null}return {uidu,rid,eid,f,u,r}}
+function registerPackageAndSendQR(){let data=buildPackageFromForm();if(!data)return;let {uidu,rid,eid,f,u,r}=data;let reader=new FileReader();reader.onload=async()=>{let p={id:uid(),codigo:'TD-'+Date.now().toString(36).toUpperCase(),unidadeId:uidu,moradorId:rid,entregadorId:eid,desc:pDesc.value.trim(),foto:reader.result,entrada:new Date().toLocaleString('pt-BR'),status:'Pendente',retirada:null};packages.unshift(p);save();currentQR=p;toast('Encomenda registrada. Gerando QR Code...');go('encomendas');renderPackages();showQR(p);setTimeout(()=>autoSendQRToResident(p),500)};reader.readAsDataURL(f)}
+function savePackage(){return registerPackageAndSendQR()}
 
 function deletePackage(id){if(!confirm('Excluir esta encomenda?'))return;packages=packages.filter(p=>p.id!==id);save();toast('Encomenda excluída.')}
 function markDone(id){let p=packages.find(x=>x.id===id);if(!p)return;p.status='Retirada';p.retirada=new Date().toLocaleString('pt-BR');save();toast('Encomenda marcada como retirada!')}
@@ -218,6 +221,25 @@ async function getQRBlob(){
    return null;
  }
 }
+async function autoSendQRToResident(p){
+ if(!p)return;
+ let u=units.find(x=>x.id===p.unidadeId)||{}, r=(u.residents||[]).find(x=>x.id===p.moradorId);
+ if(!r){toast('Encomenda registrada, mas o morador não foi encontrado.');return}
+ let blob=await getQRBlob();
+ let text=`Olá, ${r.nome}! Sua encomenda ${p.codigo} está disponível para retirada na portaria. Apresente o QR Code no momento da retirada.`;
+ if(blob && navigator.share && navigator.canShare){
+   try{
+     let file=new File([blob],`${p.codigo}.png`,{type:blob.type||'image/png'});
+     if(navigator.canShare({files:[file]})){
+       await navigator.share({title:'QR Code - The Door',text,files:[file]});
+       return;
+     }
+   }catch(e){if(e && e.name==='AbortError')return;}
+ }
+ if(r.whats){let num=r.whats.replace(/\D/g,'');window.open('https://wa.me/'+num+'?text='+encodeURIComponent(text),'_blank');toast('WhatsApp aberto com a mensagem. Anexe o QR Code exibido na tela.');}
+ else toast('QR Code gerado. Use o botão "Enviar QR" para compartilhar com o morador.');
+}
+
 async function shareQR(){
  if(!currentQR)return;
  let u=units.find(x=>x.id===currentQR.unidadeId)||{}, r=(u.residents||[]).find(x=>x.id===currentQR.moradorId);
