@@ -36,13 +36,13 @@ button:active{transform:scale(.98)}
 video{width:100%;max-height:350px;background:#111;border-radius:10px}
 small.code{word-break:break-all;color:#765}
 @media(max-width:600px){main{padding:12px}header{padding:15px}nav{top:69px}}
-</style>
+.unitbox{border:1px solid #dfd3c3;border-radius:10px;padding:12px;margin-top:10px;background:#fbf8f2}.unitrow{display:flex;gap:8px;align-items:center;justify-content:space-between;border-bottom:1px solid #eee;padding:9px 0}.unitrow:last-child{border-bottom:0}.cameraNote{background:#f6ead1;padding:10px;border-radius:9px;margin-top:10px;font-size:13px}.photoBig{width:100%;max-width:420px;max-height:360px;object-fit:contain;border-radius:12px;margin:8px auto;display:block}</style>
 </head>
 <body>
 <header><h1>🚪 The Door</h1><small>Gestão de encomendas do condomínio</small></header>
 <nav>
 <button data-tab="painel" class="active">Painel</button>
-<button data-tab="moradores">Moradores</button>
+<button data-tab="moradores">Unidades/Moradores</button>
 <button data-tab="entregadores">Entregadores</button>
 <button data-tab="encomendas">Encomendas</button>
 <button data-tab="historico">Histórico</button>
@@ -56,35 +56,27 @@ small.code{word-break:break-all;color:#765}
 <div><div class="stat" id="stMor">0</div><div class="muted">Moradores</div></div>
 </div></div>
 <div class="card"><h2>Ações rápidas</h2><div class="actions">
-<button class="primary" onclick="go('encomendas');resetPackageForm()">📦 Nova encomenda</button>
+<button class="primary" onclick="go('encomendas');resetPackageForm();setTimeout(openPackageCamera,300)">📦 Nova encomenda</button>
 <button class="gold" onclick="go('moradores');focusName()">👤 Cadastrar morador</button>
 <button class="gray" onclick="openScanner()">📷 Ler QR Code</button>
 </div></div>
 </section>
 
 <section id="moradores">
-<div class="card">
-<h2>Cadastro de morador</h2>
-<div class="grid">
-<div><label>Nome *</label><input id="mNome"></div>
-<div><label>Bloco</label><input id="mBloco"></div>
-<div><label>Rua</label><input id="mRua"></div>
-<div><label>Quadra</label><input id="mQuadra"></div>
-<div><label>Apartamento *</label><input id="mApto"></div>
-<div><label>WhatsApp</label><input id="mWhats" placeholder="Ex.: 5521999999999"></div>
-</div>
-<div class="actions"><button class="primary" onclick="saveResident()">Salvar morador</button></div>
-</div>
-<div class="card"><h2>Moradores cadastrados</h2><input class="search" id="searchMor" placeholder="Pesquisar por nome ou apartamento" oninput="renderResidents()"><div id="residentList"></div></div>
-</section>
-
-
-<section id="entregadores">
+<div class="card"><h2>Cadastro da unidade</h2><p class="muted">Cadastre bloco e apartamento. Depois adicione o proprietário e os moradores da unidade.</p>
+<div class="grid"><div><label>Bloco *</label><input id="uBloco" placeholder="Ex.: 05"></div><div><label>Apartamento/Unidade *</label><input id="uApto" placeholder="Ex.: 203"></div><div><label>Rua</label><input id="uRua"></div><div><label>Quadra</label><input id="uQuadra"></div></div>
+<div class="actions"><button class="primary" onclick="saveUnit()">Salvar unidade</button></div></div>
+<div class="card"><h2>Proprietário e moradores da unidade</h2>
+<div class="grid"><div><label>Unidade</label><select id="rUnidade" onchange="renderUnitResidents()"></select></div><div><label>Tipo</label><select id="rTipo"><option>Proprietário</option><option>Morador</option></select></div><div><label>Nome *</label><input id="rNome"></div><div><label>WhatsApp</label><input id="rWhats" placeholder="5521999999999"></div></div>
+<div class="actions"><button class="primary" onclick="saveUnitResident()">Adicionar à unidade</button></div><div id="unitResidentsBox" class="unitbox"><span class="muted">Selecione uma unidade.</span></div></div>
+<div class="card"><h2>Unidades cadastradas</h2><input class="search" id="searchMor" placeholder="Pesquisar bloco, apartamento ou morador" oninput="renderResidents()"><div id="residentList"></div></div>
+</section><section id="entregadores">
 <div class="card">
 <h2>Cadastro de entregador</h2>
 <div class="grid">
 <div><label>Nome do entregador *</label><input id="eNome" placeholder="Nome completo"></div>
-<div><label>Empresa / transportadora</label><input id="eEmpresa" placeholder="Ex.: Correios, Shopee..."></div>
+<div><label>Empresa / plataforma *</label><select id="eEmpresa"></select></div>
+<div><label>Outra empresa</label><input id="eOutraEmpresa" placeholder="Se não estiver na lista"></div>
 <div><label>WhatsApp / telefone</label><input id="eWhats" placeholder="Ex.: 5521999999999"></div>
 <div><label>Identificação / documento</label><input id="eDoc" placeholder="Opcional"></div>
 </div>
@@ -98,18 +90,13 @@ small.code{word-break:break-all;color:#765}
 </section>
 
 <section id="encomendas">
-<div class="card">
-<h2>Nova encomenda</h2>
-<div class="grid">
-<div><label>Morador *</label><select id="pMorador"></select></div>
-<div><label>Descrição</label><input id="pDesc" placeholder="Ex.: Caixa, envelope..."></div>
-<div><label>Entregador *</label><select id="pEntregador"></select></div>
-<div><label>Foto da encomenda *</label><input id="pFoto" type="file" accept="image/*" capture="environment" onchange="previewPhoto(event)"></div>
-</div>
-<div id="photoPreviewWrap" style="display:none;margin-top:12px"><label>Pré-visualização</label><img id="photoPreview" style="max-width:260px;max-height:220px;border-radius:10px;display:block;border:1px solid #ddd"></div>
-<div class="actions"><button class="primary" onclick="savePackage()">📦 Registrar encomenda</button><button class="gray" onclick="resetPackageForm()">Limpar</button></div>
-</div>
-<div class="card"><h2>Encomendas pendentes</h2><input class="search" id="searchPkg" placeholder="Pesquisar morador, apto, descrição ou entregador" oninput="renderPackages()"><div id="packageList"></div></div>
+<div class="card"><h2>Registrar encomenda</h2><p class="cameraNote">📷 Ao iniciar uma nova encomenda, a câmera do celular será aberta para fotografar o pacote.</p>
+<div class="grid"><div><label>Bloco *</label><input id="pBloco" placeholder="Digite o bloco" oninput="filterUnitsForPackage()"></div><div><label>Unidade/Apartamento *</label><select id="pUnidade" onchange="showPackageUnitResidents()"></select></div><div><label>Morador *</label><select id="pMorador"></select></div><div><label>Entregador *</label><select id="pEntregador"></select></div><div><label>Descrição</label><input id="pDesc" placeholder="Ex.: Caixa, envelope..."></div></div>
+<div id="packageResidentsBox" class="unitbox"><span class="muted">Digite o bloco e escolha a unidade.</span></div>
+<div id="photoPreviewWrap" style="display:none;margin-top:12px"><label>Foto da encomenda</label><img id="photoPreview" class="photoBig" alt="Foto"></div>
+<input id="pFoto" type="file" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto(event)">
+<div class="actions"><button class="primary" onclick="openPackageCamera()">📷 Tirar foto e cadastrar</button><button class="gray" onclick="choosePackagePhoto()">🖼️ Escolher foto</button><button class="gray" onclick="resetPackageForm()">Limpar</button></div></div>
+<div class="card"><h2>Encomendas pendentes</h2><input class="search" id="searchPkg" placeholder="Pesquisar bloco, apartamento, morador, descrição ou código" oninput="renderPackages()"><div id="packageList"></div></div>
 </section>
 
 <section id="historico">
@@ -134,13 +121,16 @@ small.code{word-break:break-all;color:#765}
 </div></div>
 
 <script>
-const KEY_M='theDoor_moradores_v2', KEY_P='theDoor_encomendas_v2', KEY_E='theDoor_entregadores_v1';
+const COMPANY_OPTIONS=['Mercado Livre','Shopee','TikTok Shop','Amazon','Correios','Shein','Temu','AliExpress','Magalu','Casas Bahia','DHL','FedEx','Jadlog','Total Express','Loggi','J&T Express','Cainiao','Anjun Courier','Mile Express','Azul Cargo','Kangu','Mandaê','Sequoia','Outra'];
+const KEY_M='theDoor_moradores_v3', KEY_P='theDoor_encomendas_v3', KEY_E='theDoor_entregadores_v2', KEY_U='theDoor_unidades_v1';
+let units=JSON.parse(localStorage.getItem(KEY_U)||'[]');
 let residents=JSON.parse(localStorage.getItem(KEY_M)||'[]');
 let packages=JSON.parse(localStorage.getItem(KEY_P)||'[]');
 let couriers=JSON.parse(localStorage.getItem(KEY_E)||'[]');
 let currentQR=null, stream=null, scanTimer=null;
 
-function save(){localStorage.setItem(KEY_M,JSON.stringify(residents));localStorage.setItem(KEY_P,JSON.stringify(packages));update();}
+function save(){localStorage.setItem(KEY_M,JSON.stringify(residents));localStorage.setItem(KEY_P,JSON.stringify(packages));(function(){try{let old=JSON.parse(localStorage.getItem('theDoor_moradores_v2')||'[]');if(!units.length&&old.length){let m={};old.forEach(r=>{let k=unitKey(r.bloco,r.apto);if(!m[k])m[k]={id:uid(),key:k,bloco:r.bloco||'',apto:r.apto||'',rua:r.rua||'',quadra:r.quadra||'',residents:[]};m[k].residents.push({id:uid(),nome:r.nome,tipo:'Morador',whats:r.whats||''})});units=Object.values(m)}let oe=JSON.parse(localStorage.getItem('theDoor_entregadores_v1')||'[]');if(!couriers.length&&oe.length)couriers=oe}catch(e){}})();
+update();}
 function toast(t){const e=document.getElementById('toast');e.textContent=t;e.style.display='block';clearTimeout(window.tt);window.tt=setTimeout(()=>e.style.display='none',2600)}
 function go(id){document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelector(`[data-tab="${id}"]`).classList.add('active');update()}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>go(b.dataset.tab));
@@ -148,104 +138,75 @@ function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 function esc(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
 function residentName(id){let r=residents.find(x=>x.id===id);return r?r.nome+' — '+r.apto:'Morador não encontrado'}
 function focusName(){setTimeout(()=>document.getElementById('mNome').focus(),100)}
-function saveResident(){
- let nome=document.getElementById('mNome').value.trim(), apto=document.getElementById('mApto').value.trim();
- if(!nome||!apto)return toast('Preencha nome e apartamento.');
- residents.push({id:uid(),nome,apto,bloco:document.getElementById('mBloco').value.trim(),rua:document.getElementById('mRua').value.trim(),quadra:document.getElementById('mQuadra').value.trim(),whats:document.getElementById('mWhats').value.trim()});
- ['mNome','mApto','mBloco','mRua','mQuadra','mWhats'].forEach(id=>document.getElementById(id).value='');
- save();toast('Morador cadastrado com sucesso!');
-}
-function deleteResident(id){if(!confirm('Excluir este morador?'))return;residents=residents.filter(r=>r.id!==id);save();toast('Morador excluído.')}
-function renderResidents(){
- let q=(document.getElementById('searchMor')?.value||'').toLowerCase(), arr=residents.filter(r=>(r.nome+' '+r.apto+' '+r.bloco).toLowerCase().includes(q));
- document.getElementById('residentList').innerHTML=arr.length?arr.map(r=>`<div class="item"><h3>${esc(r.nome)}</h3><span class="tag">Apto ${esc(r.apto)}</span> ${r.bloco?`<span class="tag">Bloco ${esc(r.bloco)}</span>`:''}<p class="muted">${esc([r.rua,r.quadra,r.whats].filter(Boolean).join(' • '))}</p><button class="danger" onclick="deleteResident('${r.id}')">Excluir</button></div>`).join(''):'<p class="muted">Nenhum morador cadastrado.</p>';
-}
-function refreshResidentSelect(){
- let s=document.getElementById('pMorador');s.innerHTML='<option value="">Selecione o morador</option>'+residents.map(r=>`<option value="${r.id}">${esc(r.nome)} — ${esc(r.apto)}</option>`).join('');
-}
-function resetPackageForm(){['pDesc'].forEach(id=>document.getElementById(id).value='');document.getElementById('pMorador').value='';document.getElementById('pEntregador').value='';document.getElementById('pFoto').value='';document.getElementById('photoPreviewWrap').style.display='none';document.getElementById('photoPreview').src=''}
 
-function saveCourier(){
- let nome=document.getElementById('eNome').value.trim();
- if(!nome)return toast('Informe o nome do entregador.');
- couriers.push({id:uid(),nome,empresa:document.getElementById('eEmpresa').value.trim(),whats:document.getElementById('eWhats').value.trim(),doc:document.getElementById('eDoc').value.trim()});
- ['eNome','eEmpresa','eWhats','eDoc'].forEach(id=>document.getElementById(id).value='');
- save();toast('Entregador cadastrado com sucesso!');
-}
-function deleteCourier(id){
- if(packages.some(p=>p.entregadorId===id && p.status==='Pendente')) return toast('Não é possível excluir: há encomenda pendente deste entregador.');
- if(!confirm('Excluir este entregador?'))return;
- couriers=couriers.filter(e=>e.id!==id);save();toast('Entregador excluído.');
-}
-function renderCouriers(){
- let q=(document.getElementById('searchEnt')?.value||'').toLowerCase();
- let arr=couriers.filter(e=>(e.nome+' '+e.empresa+' '+e.whats).toLowerCase().includes(q));
- document.getElementById('courierList').innerHTML=arr.length?arr.map(e=>`<div class="item"><h3>${esc(e.nome)}</h3><p class="muted">${esc([e.empresa,e.whats,e.doc].filter(Boolean).join(' • '))}</p><button class="danger" onclick="deleteCourier('${e.id}')">Excluir</button></div>`).join(''):'<p class="muted">Nenhum entregador cadastrado.</p>';
-}
-function refreshCourierSelect(){
- let s=document.getElementById('pEntregador');
- s.innerHTML='<option value="">Selecione o entregador</option>'+couriers.map(e=>`<option value="${e.id}">${esc(e.nome)}${e.empresa?' — '+esc(e.empresa):''}</option>`).join('');
-}
-function previewPhoto(ev){
- const file=ev.target.files?.[0];
- if(!file){document.getElementById('photoPreviewWrap').style.display='none';return}
- const reader=new FileReader();
- reader.onload=()=>{document.getElementById('photoPreview').src=reader.result;document.getElementById('photoPreviewWrap').style.display='block'};
- reader.readAsDataURL(file);
-}
-function readPhoto(){
- return new Promise(resolve=>{
-  const f=document.getElementById('pFoto').files?.[0];
-  if(!f)return resolve('');
-  const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>resolve('');r.readAsDataURL(f);
- });
-}
-async function savePackage(){
- let rid=document.getElementById('pMorador').value, eid=document.getElementById('pEntregador').value;
- if(!rid)return toast('Selecione o morador.');
- if(!eid)return toast('Selecione o entregador.');
- let foto=await readPhoto();
- if(!foto)return toast('Tire ou selecione uma foto da encomenda.');
- let p={id:uid(),codigo:'TD-'+Date.now().toString(36).toUpperCase(),moradorId:rid,entregadorId:eid,desc:document.getElementById('pDesc').value.trim(),foto,entrada:new Date().toLocaleString('pt-BR'),status:'Pendente',retirada:null};
- packages.unshift(p);save();resetPackageForm();showQR(p);toast('Encomenda registrada com foto!');
-}
+function unitKey(b,a){return String(b||'').trim().toUpperCase()+'-'+String(a||'').trim().toUpperCase()}
+function unitLabel(u){return `Bloco ${u.bloco} — Apto ${u.apto}`}
+function saveUnit(){let bloco=uBloco.value.trim(),apto=uApto.value.trim();if(!bloco||!apto)return toast('Informe bloco e apartamento.');if(units.some(u=>u.key===unitKey(bloco,apto)))return toast('Esta unidade já está cadastrada.');units.push({id:uid(),key:unitKey(bloco,apto),bloco,apto,rua:uRua.value.trim(),quadra:uQuadra.value.trim(),residents:[]});['uBloco','uApto','uRua','uQuadra'].forEach(id=>document.getElementById(id).value='');save();toast('Unidade cadastrada.')}
+function deleteUnit(id){if(!confirm('Excluir esta unidade e seus moradores?'))return;units=units.filter(u=>u.id!==id);save();toast('Unidade excluída.')}
+function saveUnitResident(){let id=rUnidade.value,nome=rNome.value.trim();if(!id)return toast('Selecione a unidade.');if(!nome)return toast('Informe o nome.');let u=units.find(x=>x.id===id);u.residents.push({id:uid(),nome,tipo:rTipo.value,whats:rWhats.value.trim()});rNome.value='';rWhats.value='';save();renderUnitResidents();toast('Morador adicionado.')}
+function deleteUnitResident(uidu,rid){let u=units.find(x=>x.id===uidu);u.residents=u.residents.filter(r=>r.id!==rid);save();rUnidade.value=uidu;renderUnitResidents()}
+function refreshUnitSelect(){rUnidade.innerHTML='<option value="">Selecione a unidade</option>'+units.map(u=>`<option value="${u.id}">${esc(unitLabel(u))}</option>`).join('')}
+function renderUnitResidents(){let u=units.find(x=>x.id===rUnidade.value);unitResidentsBox.innerHTML=u?`<b>${esc(unitLabel(u))}</b>`+(u.residents.length?u.residents.map(r=>`<div class="unitrow"><span><b>${esc(r.nome)}</b> — ${esc(r.tipo)}</span><button class="danger" onclick="deleteUnitResident('${u.id}','${r.id}')">Excluir</button></div>`).join(''):'<p class="muted">Nenhum morador.</p>'):'<span class="muted">Selecione uma unidade.</span>'}
+function renderResidents(){let q=(searchMor.value||'').toLowerCase();let arr=units.filter(u=>(u.bloco+' '+u.apto+' '+u.residents.map(r=>r.nome).join(' ')).toLowerCase().includes(q));residentList.innerHTML=arr.length?arr.map(u=>`<div class="item"><h3>${esc(unitLabel(u))}</h3>${u.residents.map(r=>`<span class="tag">${esc(r.tipo)}: ${esc(r.nome)}</span> `).join('')}<div class="actions"><button class="gray" onclick="rUnidade.value='${u.id}';renderUnitResidents()">👥 Ver moradores</button><button class="danger" onclick="deleteUnit('${u.id}')">Excluir</button></div></div>`).join(''):'<p class="muted">Nenhuma unidade cadastrada.</p>'}
+function filterUnitsForPackage(){let q=pBloco.value.trim().toUpperCase();pUnidade.innerHTML='<option value="">Selecione a unidade</option>'+units.filter(u=>!q||u.bloco.toUpperCase()===q).map(u=>`<option value="${u.id}">${esc(unitLabel(u))}</option>`).join('');pMorador.innerHTML='<option value="">Selecione a unidade primeiro</option>'}
+function showPackageUnitResidents(){let u=units.find(x=>x.id===pUnidade.value);if(!u){pMorador.innerHTML='<option value="">Selecione a unidade primeiro</option>';return}pMorador.innerHTML='<option value="">Selecione o morador</option>'+u.residents.map(r=>`<option value="${r.id}">${esc(r.nome)} — ${esc(r.tipo)}</option>`).join('');packageResidentsBox.innerHTML=u.residents.length?`<b>Moradores da unidade:</b> `+u.residents.map(r=>esc(r.nome)+' — '+esc(r.tipo)).join(' • '):'<span class="muted">Nenhum morador cadastrado.</span>'}
+function refreshResidentSelect(){pMorador.innerHTML='<option value="">Escolha bloco e unidade primeiro</option>'}
+function refreshCourierSelect(){pEntregador.innerHTML='<option value="">Selecione o entregador</option>'+couriers.map(e=>`<option value="${e.id}">${esc(e.nome)}${e.empresa?' — '+esc(e.empresa):''}</option>`).join('')}
+function refreshCompanyOptions(){eEmpresa.innerHTML='<option value="">Selecione a empresa/plataforma</option>'+COMPANY_OPTIONS.map(c=>`<option>${esc(c)}</option>`).join('')}
+function saveCourier(){let nome=eNome.value.trim(),empresa=eEmpresa.value,outra=eOutraEmpresa.value.trim();if(!nome)return toast('Informe o nome.');if(!empresa&&!outra)return toast('Selecione a empresa.');if(empresa==='Outra')empresa=outra||'Outra';couriers.push({id:uid(),nome,empresa,whats:eWhats.value.trim(),doc:eDoc.value.trim()});['eNome','eOutraEmpresa','eWhats','eDoc'].forEach(id=>document.getElementById(id).value='');eEmpresa.value='';save();toast('Entregador cadastrado.')}
+function deleteCourier(id){if(!confirm('Excluir este entregador?'))return;couriers=couriers.filter(e=>e.id!==id);save();toast('Entregador excluído.')}
+function renderCouriers(){let q=(searchEnt.value||'').toLowerCase();let arr=couriers.filter(e=>(e.nome+' '+e.empresa).toLowerCase().includes(q));courierList.innerHTML=arr.length?arr.map(e=>`<div class="item"><h3>${esc(e.nome)}</h3><p class="muted">${esc(e.empresa)}</p><button class="danger" onclick="deleteCourier('${e.id}')">Excluir</button></div>`).join(''):'<p class="muted">Nenhum entregador.</p>'}
+function resetPackageForm(){pBloco.value='';pUnidade.innerHTML='<option value="">Digite o bloco primeiro</option>';pMorador.innerHTML='<option value="">Selecione a unidade primeiro</option>';pEntregador.value='';pDesc.value='';pFoto.value='';photoPreviewWrap.style.display='none';packageResidentsBox.innerHTML='<span class="muted">Digite o bloco e escolha a unidade.</span>'}
+function choosePackagePhoto(){pFoto.click()}
+function openPackageCamera(){pFoto.click()}
+function previewPhoto(ev){let f=ev.target.files?.[0];if(!f)return;let r=new FileReader();r.onload=()=>{photoPreview.src=r.result;photoPreviewWrap.style.display='block'};r.readAsDataURL(f)}
+function savePackage(){let uidu=pUnidade.value,rid=pMorador.value,eid=pEntregador.value,f=pFoto.files?.[0];if(!uidu)return toast('Informe bloco e unidade.');if(!rid)return toast('Selecione o morador.');if(!eid)return toast('Selecione o entregador.');if(!f)return toast('Tire a foto primeiro.');let r=new FileReader();r.onload=()=>{packages.unshift({id:uid(),codigo:'TD-'+Date.now().toString(36).toUpperCase(),unidadeId:uidu,moradorId:rid,entregadorId:eid,desc:pDesc.value.trim(),foto:r.result,entrada:new Date().toLocaleString('pt-BR'),status:'Pendente',retirada:null});save();resetPackageForm();toast('Encomenda enviada para Pendentes.');go('encomendas')};r.readAsDataURL(f)}
 
 function deletePackage(id){if(!confirm('Excluir esta encomenda?'))return;packages=packages.filter(p=>p.id!==id);save();toast('Encomenda excluída.')}
 function markDone(id){let p=packages.find(x=>x.id===id);if(!p)return;p.status='Retirada';p.retirada=new Date().toLocaleString('pt-BR');save();toast('Encomenda marcada como retirada!')}
 function renderPackages(){
  let q=(document.getElementById('searchPkg')?.value||'').toLowerCase();
- let arr=packages.filter(p=>p.status==='Pendente').filter(p=>{let r=residents.find(x=>x.id===p.moradorId)||{};return (r.nome+' '+r.apto+' '+p.desc+' '+p.entregador+' '+p.codigo).toLowerCase().includes(q)});
+ let arr=packages.filter(p=>p.status==='Pendente').filter(p=>{
+  let u=units.find(x=>x.id===p.unidadeId)||{},r=(u.residents||[]).find(x=>x.id===p.moradorId)||{},e=couriers.find(x=>x.id===p.entregadorId)||{};
+  return (u.bloco+' '+u.apto+' '+r.nome+' '+p.desc+' '+e.nome+' '+e.empresa+' '+p.codigo).toLowerCase().includes(q)
+ });
  document.getElementById('packageList').innerHTML=arr.length?arr.map(p=>cardPackage(p,true)).join(''):'<p class="muted">Nenhuma encomenda pendente.</p>';
 }
 function renderHistory(){
- let q=(document.getElementById('searchHist')?.value||'').toLowerCase(),arr=packages.filter(p=>p.status==='Retirada').filter(p=>{let r=residents.find(x=>x.id===p.moradorId)||{};return (r.nome+' '+r.apto+' '+p.codigo).toLowerCase().includes(q)});
+ let q=(document.getElementById('searchHist')?.value||'').toLowerCase();
+ let arr=packages.filter(p=>p.status==='Retirada').filter(p=>{
+  let u=units.find(x=>x.id===p.unidadeId)||{},r=(u.residents||[]).find(x=>x.id===p.moradorId)||{};
+  return (u.bloco+' '+u.apto+' '+r.nome+' '+p.codigo).toLowerCase().includes(q)
+ });
  document.getElementById('historyList').innerHTML=arr.length?arr.map(p=>cardPackage(p,false)).join(''):'<p class="muted">Nenhuma retirada registrada.</p>';
 }
 function cardPackage(p,pending){
- let r=residents.find(x=>x.id===p.moradorId)||{}, e=couriers.find(x=>x.id===p.entregadorId)||{};
- return `<div class="item ${pending?'pending':'done'}">
- <h3>${esc(r.nome)} — Apto ${esc(r.apto)}</h3>
- <span class="tag">${esc(p.status)}</span>
- <p><b>Código:</b> <small class="code">${esc(p.codigo)}</small><br>
- <b>Descrição:</b> ${esc(p.desc||'Não informada')}<br>
- <b>Entregador:</b> ${esc(e.nome||'Não informado')}${e.empresa?' • '+esc(e.empresa):''}<br>
- <b>Entrada:</b> ${esc(p.entrada)}${p.retirada?'<br><b>Retirada:</b> '+esc(p.retirada):''}</p>
+ let u=units.find(x=>x.id===p.unidadeId)||{},r=(u.residents||[]).find(x=>x.id===p.moradorId)||{},e=couriers.find(x=>x.id===p.entregadorId)||{};
+ return `<div class="item ${pending?'pending':'done'}"><h3>Bloco ${esc(u.bloco||'')} — Apto ${esc(u.apto||'')}</h3><span class="tag">${esc(p.status)}</span>
+ <p><b>Morador:</b> ${esc(r.nome||'Não informado')} — ${esc(r.tipo||'')}<br><b>Código:</b> <small class="code">${esc(p.codigo)}</small><br><b>Descrição:</b> ${esc(p.desc||'Não informada')}<br><b>Entregador:</b> ${esc(e.nome||'Não informado')}${e.empresa?' • '+esc(e.empresa):''}<br><b>Entrada:</b> ${esc(p.entrada)}${p.retirada?'<br><b>Retirada:</b> '+esc(p.retirada):''}</p>
  ${p.foto?`<img src="${p.foto}" alt="Foto da encomenda" style="max-width:180px;max-height:150px;border-radius:8px;display:block;margin:8px 0">`:''}
- <div class="actions">
- ${pending?`<button class="gray" onclick="viewPhoto('${p.id}')">🖼️ Ver foto</button><button class="gold" onclick="showQR(packages.find(x=>x.id==='${p.id}'))">🔳 QR</button><button class="primary" onclick="markDone('${p.id}')">✅ Dar baixa</button>`:''}
- <button class="danger" onclick="deletePackage('${p.id}')">Excluir</button>
- </div></div>`;
+ <div class="actions">${pending?`<button class="gray" onclick="viewPhoto('${p.id}')">🖼️ Foto</button><button class="gold" onclick="showQR(packages.find(x=>x.id==='${p.id}'))">🔳 QR</button><button class="primary" onclick="markDone('${p.id}')">✅ Dar baixa</button>`:''}<button class="danger" onclick="deletePackage('${p.id}')">Excluir</button></div></div>`;
 }
+
 function viewPhoto(id){
- let p=packages.find(x=>x.id===id); if(!p?.foto)return toast('Esta encomenda não possui foto.');
- document.getElementById('qrText').innerHTML=`<b>${esc(p.codigo)}</b><br>Foto da encomenda`;
+ let p=packages.find(x=>x.id===id);if(!p?.foto)return toast('Esta encomenda não possui foto.');
+ let u=units.find(x=>x.id===p.unidadeId)||{},r=(u.residents||[]).find(x=>x.id===p.moradorId)||{},e=couriers.find(x=>x.id===p.entregadorId)||{};
+ document.getElementById('qrText').innerHTML=`<b>${esc(p.codigo)}</b><br>Bloco ${esc(u.bloco||'')} / Apto ${esc(u.apto||'')} • ${esc(r.nome||'')}<br><span class="muted">${esc(e.nome||'')}${e.empresa?' • '+esc(e.empresa):''}</span>`;
  document.getElementById('qrImg').style.display='none';
  let old=document.getElementById('photoModalImg');
- if(!old){old=document.createElement('img');old.id='photoModalImg';old.style.cssText='max-width:100%;max-height:420px;border-radius:10px;margin:10px 0';document.querySelector('#qrModal .box').insertBefore(old,document.getElementById('qrText'))}
+ if(!old){old=document.createElement('img');old.id='photoModalImg';old.className='photoBig';document.querySelector('#qrModal .box').insertBefore(old,document.getElementById('qrText'))}
  old.src=p.foto;old.style.display='block';document.getElementById('qrModal').style.display='flex';
 }
 
-function showQR(p){if(!p)return;currentQR=p;document.getElementById('qrImg').style.display='block';let pm=document.getElementById('photoModalImg');if(pm)pm.style.display='none';document.getElementById('qrText').innerHTML=`<b>${esc(p.codigo)}</b><br>${esc(residentName(p.moradorId))}`;document.getElementById('qrImg').src='https://api.qrserver.com/v1/create-qr-code/?size=300x300&data='+encodeURIComponent(p.codigo);document.getElementById('qrModal').style.display='flex'}
+function showQR(p){
+ if(!p)return;currentQR=p;
+ let u=units.find(x=>x.id===p.unidadeId)||{},r=(u.residents||[]).find(x=>x.id===p.moradorId)||{};
+ document.getElementById('qrImg').style.display='block';let pm=document.getElementById('photoModalImg');if(pm)pm.style.display='none';
+ document.getElementById('qrText').innerHTML=`<b>${esc(p.codigo)}</b><br>${esc(r.nome||'')} — Bloco ${esc(u.bloco||'')} / Apto ${esc(u.apto||'')}`;
+ document.getElementById('qrImg').src='https://api.qrserver.com/v1/create-qr-code/?size=300x300&data='+encodeURIComponent(p.codigo);
+ document.getElementById('qrModal').style.display='flex';
+}
+
 async function getQRBlob(){
  if(!currentQR) return null;
  let url=document.getElementById('qrImg').src;
@@ -259,7 +220,7 @@ async function getQRBlob(){
 }
 async function shareQR(){
  if(!currentQR)return;
- let r=residents.find(x=>x.id===currentQR.moradorId);
+ let u=units.find(x=>x.id===currentQR.unidadeId)||{}, r=(u.residents||[]).find(x=>x.id===currentQR.moradorId);
  if(!r)return toast('Morador não encontrado.');
  let text=`Olá, ${r.nome}! Sua encomenda ${currentQR.codigo} está disponível para retirada na portaria. Este QR Code identifica a encomenda e a foto ajuda na conferência. Apresente o QR Code no momento da retirada.`;
  let blob=await getQRBlob();
@@ -287,7 +248,7 @@ function downloadQR(){
 }
 function sendWhatsText(){
  if(!currentQR)return;
- let r=residents.find(x=>x.id===currentQR.moradorId);
+ let u=units.find(x=>x.id===currentQR.unidadeId)||{}, r=(u.residents||[]).find(x=>x.id===currentQR.moradorId);
  if(!r?.whats)return toast('Este morador não possui WhatsApp cadastrado.');
  let num=r.whats.replace(/\D/g,'');
  let msg=`Olá, ${r.nome}! Sua encomenda ${currentQR.codigo} está disponível para retirada na portaria. O QR Code foi gerado pelo The Door.`;
