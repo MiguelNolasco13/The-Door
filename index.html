@@ -44,7 +44,7 @@ small.code{word-break:break-all;color:#765}
 <nav>
 <button data-tab="painel" class="active">Painel</button>
 <button data-tab="moradores">Unidades/Moradores</button>
-<button data-tab="entregadores">Entregadores</button>
+<button data-tab="transportadoraes">Transportadoraes</button>
 <button data-tab="encomendas">Encomendas</button>
 <button data-tab="historico">Histórico</button>
 </nav>
@@ -71,20 +71,20 @@ small.code{word-break:break-all;color:#765}
 <div class="grid"><div><label>Unidade</label><select id="rUnidade" onchange="renderUnitResidents()"></select></div><div><label>Tipo</label><select id="rTipo"><option>Proprietário</option><option>Morador</option></select></div><div><label>Nome *</label><input id="rNome"></div><div><label>WhatsApp</label><input id="rWhats" placeholder="5521999999999"></div></div>
 <div class="actions"><button class="primary" onclick="saveUnitResident()">Adicionar à unidade</button></div><div id="unitResidentsBox" class="unitbox"><span class="muted">Selecione uma unidade.</span></div></div>
 <div class="card"><h2>Unidades cadastradas</h2><input class="search" id="searchMor" placeholder="Pesquisar bloco, apartamento ou morador" oninput="renderResidents()"><div id="residentList"></div></div>
-</section><section id="entregadores">
+</section><section id="transportadoraes">
 <div class="card">
-<h2>Cadastro de entregador</h2>
+<h2>Cadastro de transportadora</h2>
 <div class="grid">
-<div><label>Nome do entregador *</label><input id="eNome" placeholder="Nome completo"></div>
-<div><label>Empresa / plataforma *</label><select id="eEmpresa"></select></div>
+<div><label>Transportadora *</label><input id="eNome" placeholder="Nome completo"></div>
+<div><label>Empresa / plataforma *</label><select id="eEmpresa"><option value="Mercado Livre">Mercado Livre</option><option value="Shopee">Shopee</option><option value="TikTok Shop">TikTok Shop</option><option value="Amazon">Amazon</option><option value="Correios">Correios</option><option value="Shein">Shein</option><option value="Temu">Temu</option><option value="AliExpress">AliExpress</option><option value="Magalu">Magalu</option><option value="Casas Bahia">Casas Bahia</option><option value="DHL">DHL</option><option value="FedEx">FedEx</option><option value="Jadlog">Jadlog</option><option value="Total Express">Total Express</option><option value="Loggi">Loggi</option><option value="J&T Express">J&T Express</option><option value="Cainiao">Cainiao</option><option value="Anjun Courier">Anjun Courier</option><option value="Mile Express">Mile Express</option><option value="Azul Cargo">Azul Cargo</option><option value="Kangu">Kangu</option><option value="Mandaê">Mandaê</option><option value="Sequoia">Sequoia</option><option value="Outra">Outra</option></select></div>
 <div><label>Outra empresa</label><input id="eOutraEmpresa" placeholder="Se não estiver na lista"></div>
 <div><label>WhatsApp / telefone</label><input id="eWhats" placeholder="Ex.: 5521999999999"></div>
 <div><label>Identificação / documento</label><input id="eDoc" placeholder="Opcional"></div>
 </div>
-<div class="actions"><button class="primary" onclick="saveCourier()">Salvar entregador</button></div>
+<div class="actions"><button class="primary" onclick="saveCourier()">Salvar transportadora</button></div>
 </div>
 <div class="card">
-<h2>Entregadores cadastrados</h2>
+<h2>Transportadoraes cadastrados</h2>
 <input class="search" id="searchEnt" placeholder="Pesquisar por nome ou empresa" oninput="renderCouriers()">
 <div id="courierList"></div>
 </div>
@@ -92,7 +92,7 @@ small.code{word-break:break-all;color:#765}
 
 <section id="encomendas">
 <div class="card"><h2>Registrar encomenda</h2><p class="cameraNote">📷 Ao iniciar uma nova encomenda, a câmera do celular será aberta para fotografar o pacote.</p>
-<div class="grid"><div><label>Bloco *</label><input id="pBloco" placeholder="Digite o bloco" oninput="filterUnitsForPackage()"></div><div><label>Unidade/Apartamento *</label><select id="pUnidade" onchange="showPackageUnitResidents()"></select></div><div><label>Morador *</label><select id="pMorador"></select></div><div><label>Entregador *</label><select id="pEntregador"></select></div><div><label>Descrição</label><input id="pDesc" placeholder="Ex.: Caixa, envelope..."></div></div>
+<div class="grid"><div><label>Bloco *</label><input id="pBloco" placeholder="Digite o bloco" oninput="filterUnitsForPackage()"></div><div><label>Unidade/Apartamento *</label><select id="pUnidade" onchange="showPackageUnitResidents()"></select></div><div><label>Morador *</label><select id="pMorador"></select></div><div><label>Transportadora *</label><select id="pTransportadora"><option value="Mercado Livre">Mercado Livre</option><option value="Shopee">Shopee</option><option value="TikTok Shop">TikTok Shop</option><option value="Amazon">Amazon</option><option value="Correios">Correios</option><option value="Shein">Shein</option><option value="Temu">Temu</option><option value="AliExpress">AliExpress</option><option value="Magalu">Magalu</option><option value="Casas Bahia">Casas Bahia</option><option value="DHL">DHL</option><option value="FedEx">FedEx</option><option value="Jadlog">Jadlog</option><option value="Total Express">Total Express</option><option value="Loggi">Loggi</option><option value="J&T Express">J&T Express</option><option value="Cainiao">Cainiao</option><option value="Anjun Courier">Anjun Courier</option><option value="Mile Express">Mile Express</option><option value="Azul Cargo">Azul Cargo</option><option value="Kangu">Kangu</option><option value="Mandaê">Mandaê</option><option value="Sequoia">Sequoia</option><option value="Outra">Outra</option></select></div><div><label>Descrição</label><input id="pDesc" placeholder="Ex.: Caixa, envelope..."></div></div>
 <div id="packageResidentsBox" class="unitbox"><span class="muted">Digite o bloco e escolha a unidade.</span></div>
 <div id="photoPreviewWrap" style="display:none;margin-top:12px"><label>Foto da encomenda</label><img id="photoPreview" class="photoBig" alt="Foto"></div>
 <input id="pFoto" type="file" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto(event)">
@@ -137,14 +137,14 @@ const CLOUD_ENABLED = !!(SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase);
 const sb = CLOUD_ENABLED ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 const COMPANY_OPTIONS=['Mercado Livre','Shopee','TikTok Shop','Amazon','Correios','Shein','Temu','AliExpress','Magalu','Casas Bahia','DHL','FedEx','Jadlog','Total Express','Loggi','J&T Express','Cainiao','Anjun Courier','Mile Express','Azul Cargo','Kangu','Mandaê','Sequoia','Outra'];
-const KEY_M='theDoor_moradores_v3', KEY_P='theDoor_encomendas_v3', KEY_E='theDoor_entregadores_v2', KEY_U='theDoor_unidades_v1';
+const KEY_M='theDoor_moradores_v3', KEY_P='theDoor_encomendas_v3', KEY_E='theDoor_transportadoraes_v2', KEY_U='theDoor_unidades_v1';
 let units=JSON.parse(localStorage.getItem(KEY_U)||'[]');
 let residents=JSON.parse(localStorage.getItem(KEY_M)||'[]');
 let packages=JSON.parse(localStorage.getItem(KEY_P)||'[]');
 let couriers=JSON.parse(localStorage.getItem(KEY_E)||'[]');
 let currentQR=null, stream=null, scanTimer=null;
 
-function migrateLegacy(){try{let old=JSON.parse(localStorage.getItem('theDoor_moradores_v2')||'[]');if(!units.length&&old.length){let m={};old.forEach(r=>{let k=unitKey(r.bloco,r.apto);if(!m[k])m[k]={id:uid(),key:k,bloco:r.bloco||'',apto:r.apto||'',rua:r.rua||'',quadra:r.quadra||'',residents:[]};m[k].residents.push({id:uid(),nome:r.nome||'',tipo:r.tipo==='Proprietário'?'Proprietário':'Morador',whats:r.whats||''})});units=Object.values(m);localStorage.setItem(KEY_U,JSON.stringify(units))}let oe=JSON.parse(localStorage.getItem('theDoor_entregadores_v1')||'[]');if(!couriers.length&&oe.length){couriers=oe;localStorage.setItem(KEY_E,JSON.stringify(couriers))}}catch(e){console.error(e)}}
+function migrateLegacy(){try{let old=JSON.parse(localStorage.getItem('theDoor_moradores_v2')||'[]');if(!units.length&&old.length){let m={};old.forEach(r=>{let k=unitKey(r.bloco,r.apto);if(!m[k])m[k]={id:uid(),key:k,bloco:r.bloco||'',apto:r.apto||'',rua:r.rua||'',quadra:r.quadra||'',residents:[]};m[k].residents.push({id:uid(),nome:r.nome||'',tipo:r.tipo==='Proprietário'?'Proprietário':'Morador',whats:r.whats||''})});units=Object.values(m);localStorage.setItem(KEY_U,JSON.stringify(units))}let oe=JSON.parse(localStorage.getItem('theDoor_transportadoraes_v1')||'[]');if(!couriers.length&&oe.length){couriers=oe;localStorage.setItem(KEY_E,JSON.stringify(couriers))}}catch(e){console.error(e)}}
 function save(){localStorage.setItem(KEY_U,JSON.stringify(units));localStorage.setItem(KEY_M,JSON.stringify(residents));localStorage.setItem(KEY_P,JSON.stringify(packages));localStorage.setItem(KEY_E,JSON.stringify(couriers));update();}
 function toast(t){const e=document.getElementById('toast');e.textContent=t;e.style.display='block';clearTimeout(window.tt);window.tt=setTimeout(()=>e.style.display='none',2600)}
 function go(id){document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelector(`[data-tab="${id}"]`).classList.add('active');update()}
@@ -166,24 +166,24 @@ function renderResidents(){let q=(searchMor.value||'').toLowerCase();let arr=uni
 function filterUnitsForPackage(){let q=pBloco.value.trim().toUpperCase();pUnidade.innerHTML='<option value="">Selecione a unidade</option>'+units.filter(u=>!q||u.bloco.toUpperCase()===q).map(u=>`<option value="${u.id}">${esc(unitLabel(u))}</option>`).join('');pMorador.innerHTML='<option value="">Selecione a unidade primeiro</option>'}
 function showPackageUnitResidents(){let u=units.find(x=>x.id===pUnidade.value);if(!u){pMorador.innerHTML='<option value="">Selecione a unidade primeiro</option>';return}pMorador.innerHTML='<option value="">Selecione o morador</option>'+u.residents.map(r=>`<option value="${r.id}">${esc(r.nome)} — ${esc(r.tipo)}</option>`).join('');packageResidentsBox.innerHTML=u.residents.length?`<b>Moradores da unidade:</b> `+u.residents.map(r=>esc(r.nome)+' — '+esc(r.tipo)).join(' • '):'<span class="muted">Nenhum morador cadastrado.</span>'}
 function refreshResidentSelect(){pMorador.innerHTML='<option value="">Escolha bloco e unidade primeiro</option>'}
-function refreshCourierSelect(){pEntregador.innerHTML='<option value="">Selecione o entregador</option>'+couriers.map(e=>`<option value="${e.id}">${esc(e.nome)}${e.empresa?' — '+esc(e.empresa):''}</option>`).join('')}
+function refreshCourierSelect(){pTransportadora.innerHTML='<option value="">Selecione o transportadora</option>'+couriers.map(e=>`<option value="${e.id}">${esc(e.nome)}${e.empresa?' — '+esc(e.empresa):''}</option>`).join('')}
 function refreshCompanyOptions(){eEmpresa.innerHTML='<option value="">Selecione a empresa/plataforma</option>'+COMPANY_OPTIONS.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}
-function saveCourier(){let nome=eNome.value.trim(),empresa=eEmpresa.value,outra=eOutraEmpresa.value.trim();if(!nome)return toast('Informe o nome.');if(!empresa&&!outra)return toast('Selecione a empresa.');if(empresa==='Outra')empresa=outra||'Outra';couriers.push({id:uid(),nome,empresa,whats:eWhats.value.trim(),doc:eDoc.value.trim()});['eNome','eOutraEmpresa','eWhats','eDoc'].forEach(id=>document.getElementById(id).value='');eEmpresa.value='';save();toast('Entregador cadastrado.')}
-function deleteCourier(id){if(!confirm('Excluir este entregador?'))return;couriers=couriers.filter(e=>e.id!==id);save();toast('Entregador excluído.')}
-function renderCouriers(){let q=(searchEnt.value||'').toLowerCase();let arr=couriers.filter(e=>(e.nome+' '+e.empresa).toLowerCase().includes(q));courierList.innerHTML=arr.length?arr.map(e=>`<div class="item"><h3>${esc(e.nome)}</h3><p class="muted">${esc(e.empresa)}</p><button class="danger" onclick="deleteCourier('${e.id}')">Excluir</button></div>`).join(''):'<p class="muted">Nenhum entregador.</p>'}
-function resetPackageForm(){pBloco.value='';pUnidade.innerHTML='<option value="">Digite o bloco primeiro</option>';pMorador.innerHTML='<option value="">Selecione a unidade primeiro</option>';pEntregador.value='';pDesc.value='';pFoto.value='';photoPreviewWrap.style.display='none';packageResidentsBox.innerHTML='<span class="muted">Digite o bloco e escolha a unidade.</span>'}
+function saveCourier(){let nome=eNome.value.trim(),empresa=eEmpresa.value,outra=eOutraEmpresa.value.trim();if(!nome)return toast('Informe o nome.');if(!empresa&&!outra)return toast('Selecione a empresa.');if(empresa==='Outra')empresa=outra||'Outra';couriers.push({id:uid(),nome,empresa,whats:eWhats.value.trim(),doc:eDoc.value.trim()});['eNome','eOutraEmpresa','eWhats','eDoc'].forEach(id=>document.getElementById(id).value='');eEmpresa.value='';save();toast('Transportadora cadastrado.')}
+function deleteCourier(id){if(!confirm('Excluir este transportadora?'))return;couriers=couriers.filter(e=>e.id!==id);save();toast('Transportadora excluído.')}
+function renderCouriers(){let q=(searchEnt.value||'').toLowerCase();let arr=couriers.filter(e=>(e.nome+' '+e.empresa).toLowerCase().includes(q));courierList.innerHTML=arr.length?arr.map(e=>`<div class="item"><h3>${esc(e.nome)}</h3><p class="muted">${esc(e.empresa)}</p><button class="danger" onclick="deleteCourier('${e.id}')">Excluir</button></div>`).join(''):'<p class="muted">Nenhum transportadora.</p>'}
+function resetPackageForm(){pBloco.value='';pUnidade.innerHTML='<option value="">Digite o bloco primeiro</option>';pMorador.innerHTML='<option value="">Selecione a unidade primeiro</option>';pTransportadora.value='';pDesc.value='';pFoto.value='';photoPreviewWrap.style.display='none';packageResidentsBox.innerHTML='<span class="muted">Digite o bloco e escolha a unidade.</span>'}
 function choosePackagePhoto(){pFoto.click()}
 function openPackageCamera(){pFoto.click()}
 function choosePackagePhoto(){pFoto.removeAttribute('capture');pFoto.click();setTimeout(()=>pFoto.setAttribute('capture','environment'),0)}
 function previewPhoto(ev){let f=ev.target.files?.[0];if(!f)return;let r=new FileReader();r.onload=()=>{photoPreview.src=r.result;photoPreviewWrap.style.display='block'};r.readAsDataURL(f)}
-function buildPackageFromForm(){let uidu=pUnidade.value,rid=pMorador.value,eid=pEntregador.value,f=pFoto.files?.[0];if(!uidu){toast('Informe o bloco e selecione a unidade.');return null}if(!rid){toast('Selecione o morador.');return null}if(!eid){toast('Selecione o entregador.');return null}if(!f){toast('Tire ou escolha a foto da encomenda.');return null}let u=units.find(x=>x.id===uidu),r=(u?.residents||[]).find(x=>x.id===rid);if(!r){toast('Morador não encontrado.');return null}return {uidu,rid,eid,f,u,r}}
+function buildPackageFromForm(){let uidu=pUnidade.value,rid=pMorador.value,eid=pTransportadora.value,f=pFoto.files?.[0];if(!uidu){toast('Informe o bloco e selecione a unidade.');return null}if(!rid){toast('Selecione o morador.');return null}if(!eid){toast('Selecione o transportadora.');return null}if(!f){toast('Tire ou escolha a foto da encomenda.');return null}let u=units.find(x=>x.id===uidu),r=(u?.residents||[]).find(x=>x.id===rid);if(!r){toast('Morador não encontrado.');return null}return {uidu,rid,eid,f,u,r}}
 async function compressImage(file){return new Promise((resolve,reject)=>{const img=new Image(),fr=new FileReader();fr.onload=()=>{img.onload=()=>{const max=1400;let w=img.width,h=img.height;if(w>max||h>max){if(w>h){h=Math.round(h*max/w);w=max}else{w=Math.round(w*max/h);h=max}}const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');ctx.drawImage(img,0,0,w,h);c.toBlob(b=>b?resolve(b):reject(new Error('Falha ao comprimir foto')),'image/jpeg',0.78)};img.onerror=reject;img.src=fr.result};fr.onerror=reject;fr.readAsDataURL(file)})}
 function publicPackageUrl(codigo){return window.location.origin+window.location.pathname+'?encomenda='+encodeURIComponent(codigo)}
 async function uploadPackagePhoto(codigo,file){if(!CLOUD_ENABLED)return null;const blob=await compressImage(file);const path=codigo+'/'+codigo+'.jpg';const {error}=await sb.storage.from(SUPABASE_BUCKET).upload(path,blob,{contentType:'image/jpeg',upsert:true});if(error)throw error;const {data}=sb.storage.from(SUPABASE_BUCKET).getPublicUrl(path);return data.publicUrl}
-async function syncPackageCloud(p){if(!CLOUD_ENABLED)return null;const u=units.find(x=>x.id===p.unidadeId)||{},r=(u.residents||[]).find(x=>x.id===p.moradorId)||{},e=couriers.find(x=>x.id===p.entregadorId)||{};let fotoUrl=null;try{fotoUrl=await uploadPackagePhoto(p.codigo,document.getElementById('pFoto').files[0]);}catch(err){console.error(err);toast('Encomenda salva, mas não foi possível enviar a foto para a nuvem.');}
-const row={codigo:p.codigo,bloco:u.bloco||'',apto:u.apto||'',morador_nome:r.nome||'',morador_whats:r.whats||'',entregador:e.nome||'',empresa:e.empresa||'',descricao:p.desc||'',foto_url:fotoUrl||'',status:p.status,entrada:p.entrada,retirada:p.retirada||null};
+async function syncPackageCloud(p){if(!CLOUD_ENABLED)return null;const u=units.find(x=>x.id===p.unidadeId)||{},r=(u.residents||[]).find(x=>x.id===p.moradorId)||{},e=couriers.find(x=>x.id===p.transportadoraId)||{};let fotoUrl=null;try{fotoUrl=await uploadPackagePhoto(p.codigo,document.getElementById('pFoto').files[0]);}catch(err){console.error(err);toast('Encomenda salva, mas não foi possível enviar a foto para a nuvem.');}
+const row={codigo:p.codigo,bloco:u.bloco||'',apto:u.apto||'',morador_nome:r.nome||'',morador_whats:r.whats||'',transportadora:e.nome||'',empresa:e.empresa||'',descricao:p.desc||'',foto_url:fotoUrl||'',status:p.status,entrada:p.entrada,retirada:p.retirada||null};
 const {error}=await sb.from('encomendas').upsert(row,{onConflict:'codigo'});if(error){console.error(error);toast('Encomenda salva no aparelho, mas houve erro no banco online.');return fotoUrl}p.fotoUrl=fotoUrl;p.publicUrl=publicPackageUrl(p.codigo);save();return fotoUrl}
-async function registerPackageAndSendQR(){let data=buildPackageFromForm();if(!data)return;let {uidu,rid,eid,f,u,r}=data;let reader=new FileReader();reader.onload=async()=>{let p={id:uid(),codigo:'TD-'+Date.now().toString(36).toUpperCase(),unidadeId:uidu,moradorId:rid,entregadorId:eid,desc:pDesc.value.trim(),foto:reader.result,entrada:new Date().toLocaleString('pt-BR'),status:'Pendente',retirada:null,fotoUrl:null,publicUrl:null};packages.unshift(p);save();currentQR=p;toast('Registrando encomenda...');if(CLOUD_ENABLED){await syncPackageCloud(p)}else{p.publicUrl=publicPackageUrl(p.codigo);save()}go('encomendas');renderPackages();showQR(p);setTimeout(()=>autoSendQRToResident(p),500)};reader.readAsDataURL(f)}
+async function registerPackageAndSendQR(){let data=buildPackageFromForm();if(!data)return;let {uidu,rid,eid,f,u,r}=data;let reader=new FileReader();reader.onload=async()=>{let p={id:uid(),codigo:'TD-'+Date.now().toString(36).toUpperCase(),unidadeId:uidu,moradorId:rid,transportadoraId:eid,desc:pDesc.value.trim(),foto:reader.result,entrada:new Date().toLocaleString('pt-BR'),status:'Pendente',retirada:null,fotoUrl:null,publicUrl:null};packages.unshift(p);save();currentQR=p;toast('Registrando encomenda...');if(CLOUD_ENABLED){await syncPackageCloud(p)}else{p.publicUrl=publicPackageUrl(p.codigo);save()}go('encomendas');renderPackages();showQR(p);setTimeout(()=>autoSendQRToResident(p),500)};reader.readAsDataURL(f)}
 function savePackage(){return registerPackageAndSendQR()}
 
 function deletePackage(id){if(!confirm('Excluir esta encomenda?'))return;packages=packages.filter(p=>p.id!==id);save();toast('Encomenda excluída.')}
@@ -192,7 +192,7 @@ function sendPickupWhatsApp(p){let u=units.find(x=>x.id===p.unidadeId)||{},r=(u.
 function renderPackages(){
  let q=(document.getElementById('searchPkg')?.value||'').toLowerCase();
  let arr=packages.filter(p=>p.status==='Pendente').filter(p=>{
-  let u=units.find(x=>x.id===p.unidadeId)||{},r=(u.residents||[]).find(x=>x.id===p.moradorId)||{},e=couriers.find(x=>x.id===p.entregadorId)||{};
+  let u=units.find(x=>x.id===p.unidadeId)||{},r=(u.residents||[]).find(x=>x.id===p.moradorId)||{},e=couriers.find(x=>x.id===p.transportadoraId)||{};
   return (u.bloco+' '+u.apto+' '+r.nome+' '+p.desc+' '+e.nome+' '+e.empresa+' '+p.codigo).toLowerCase().includes(q)
  });
  document.getElementById('packageList').innerHTML=arr.length?arr.map(p=>cardPackage(p,true)).join(''):'<p class="muted">Nenhuma encomenda pendente.</p>';
@@ -206,16 +206,16 @@ function renderHistory(){
  document.getElementById('historyList').innerHTML=arr.length?arr.map(p=>cardPackage(p,false)).join(''):'<p class="muted">Nenhuma retirada registrada.</p>';
 }
 function cardPackage(p,pending){
- let u=units.find(x=>x.id===p.unidadeId)||{},r=(u.residents||[]).find(x=>x.id===p.moradorId)||{},e=couriers.find(x=>x.id===p.entregadorId)||{};
+ let u=units.find(x=>x.id===p.unidadeId)||{},r=(u.residents||[]).find(x=>x.id===p.moradorId)||{},e=couriers.find(x=>x.id===p.transportadoraId)||{};
  return `<div class="item ${pending?'pending':'done'}"><h3>Bloco ${esc(u.bloco||'')} — Apto ${esc(u.apto||'')}</h3><span class="tag">${esc(p.status)}</span>
- <p><b>Morador:</b> ${esc(r.nome||'Não informado')} — ${esc(r.tipo||'')}<br><b>Código:</b> <small class="code">${esc(p.codigo)}</small><br><b>Descrição:</b> ${esc(p.desc||'Não informada')}<br><b>Entregador:</b> ${esc(e.nome||'Não informado')}${e.empresa?' • '+esc(e.empresa):''}<br><b>Entrada:</b> ${esc(p.entrada)}${p.retirada?'<br><b>Retirada:</b> '+esc(p.retirada):''}</p>
+ <p><b>Morador:</b> ${esc(r.nome||'Não informado')} — ${esc(r.tipo||'')}<br><b>Código:</b> <small class="code">${esc(p.codigo)}</small><br><b>Descrição:</b> ${esc(p.desc||'Não informada')}<br><b>Transportadora:</b> ${esc(e.nome||'Não informado')}${e.empresa?' • '+esc(e.empresa):''}<br><b>Entrada:</b> ${esc(p.entrada)}${p.retirada?'<br><b>Retirada:</b> '+esc(p.retirada):''}</p>
  ${p.foto?`<img src="${p.foto}" alt="Foto da encomenda" style="max-width:180px;max-height:150px;border-radius:8px;display:block;margin:8px 0">`:''}
  <div class="actions">${pending?`<button class="gray" onclick="viewPhoto('${p.id}')">🖼️ Foto</button><button class="gold" onclick="showQR(packages.find(x=>x.id==='${p.id}'))">🔳 QR</button><button class="primary" onclick="markDone('${p.id}')">✅ Dar baixa</button>`:''}<button class="danger" onclick="deletePackage('${p.id}')">Excluir</button></div></div>`;
 }
 
 function viewPhoto(id){
  let p=packages.find(x=>x.id===id);if(!p?.foto)return toast('Esta encomenda não possui foto.');
- let u=units.find(x=>x.id===p.unidadeId)||{},r=(u.residents||[]).find(x=>x.id===p.moradorId)||{},e=couriers.find(x=>x.id===p.entregadorId)||{};
+ let u=units.find(x=>x.id===p.unidadeId)||{},r=(u.residents||[]).find(x=>x.id===p.moradorId)||{},e=couriers.find(x=>x.id===p.transportadoraId)||{};
  document.getElementById('qrText').innerHTML=`<b>${esc(p.codigo)}</b><br>Bloco ${esc(u.bloco||'')} / Apto ${esc(u.apto||'')} • ${esc(r.nome||'')}<br><span class="muted">${esc(e.nome||'')}${e.empresa?' • '+esc(e.empresa):''}</span>`;
  document.getElementById('qrImg').style.display='none';
  let old=document.getElementById('photoModalImg');
