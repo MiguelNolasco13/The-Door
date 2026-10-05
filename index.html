@@ -38,13 +38,23 @@ small.code{word-break:break-all;color:#765}
 @media(max-width:600px){main{padding:12px}header{padding:15px}nav{top:69px}}
 .unitbox{border:1px solid #dfd3c3;border-radius:10px;padding:12px;margin-top:10px;background:#fbf8f2}.unitrow{display:flex;gap:8px;align-items:center;justify-content:space-between;border-bottom:1px solid #eee;padding:9px 0}.unitrow:last-child{border-bottom:0}.cameraNote{background:#f6ead1;padding:10px;border-radius:9px;margin-top:10px;font-size:13px}.photoBig{width:100%;max-width:420px;max-height:360px;object-fit:contain;border-radius:12px;margin:8px auto;display:block}</style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style id="td-auth-style">
+#td-auth{position:fixed;inset:0;background:linear-gradient(135deg,#4a2d19,#8b682f);z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px;overflow:auto}
+#td-auth .authbox{width:min(440px,100%);background:#fffdf8;border-radius:18px;padding:24px;box-shadow:0 18px 60px rgba(0,0,0,.35)}
+#td-auth h2{margin:0 0 5px;color:#5b3a21}#td-auth .authsub{margin:0 0 18px;color:#75634f}
+#td-auth input{width:100%;box-sizing:border-box;margin:6px 0 10px;padding:12px;border:1px solid #d6c5aa;border-radius:9px;font-size:16px}
+#td-auth .authbtn{width:100%;padding:13px;border:0;border-radius:10px;background:#5b3a21;color:#fff;font-weight:bold;font-size:16px;cursor:pointer;margin-top:5px}
+#td-auth .authbtn.alt{background:#b58b3a}.td-auth-msg{min-height:20px;margin:8px 0;color:#a33a2b;font-weight:bold}.td-auth-note{font-size:12px;color:#7b6d5e;margin-top:14px;line-height:1.45}
+#td-account{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:12px}#td-logout{border:0;border-radius:8px;padding:7px 10px;background:#ead9b7;color:#4d351f;font-weight:bold}
+</style>
 </head>
 <body>
-<header><h1>🚪 The Door</h1><small>Gestão de encomendas do condomínio</small></header>
+<header><h1>🚪 The Door</h1><small>Gestão de encomendas do condomínio</small><div id="td-account" style="display:none"><span id="td-user-name"></span><button id="td-logout" type="button">Sair</button></div></header>
 <nav>
 <button data-tab="painel" class="active">Painel</button>
 <button data-tab="moradores">Unidades/Moradores</button>
-<button data-tab="transportadoraes">Transportadoraes</button>
+<button data-tab="transportadoras">Transportadoraes</button>
 <button data-tab="encomendas">Encomendas</button>
 <button data-tab="historico">Histórico</button>
 </nav>
@@ -314,5 +324,65 @@ update();
 async function loadPublicPreview(){let code=new URLSearchParams(location.search).get('encomenda');if(!code)return;if(!CLOUD_ENABLED){document.body.innerHTML=`<div style="padding:30px;font-family:Arial;max-width:600px;margin:auto"><h1>🚪 The Door</h1><h2>Pré-visualização da encomenda</h2><p>Este link precisa do armazenamento online do The Door para exibir a foto em outro celular.</p></div>`;return}try{const {data,error}=await sb.from('encomendas').select('*').eq('codigo',code).single();if(error||!data)throw error||new Error('not found');document.body.innerHTML=`<div style="padding:18px;font-family:Arial;max-width:600px;margin:auto;background:#f4efe6;min-height:100vh"><div style="background:#5b3a21;color:#fff;padding:18px;border-radius:14px;text-align:center"><h1 style="margin:0">🚪 The Door</h1><div>Pré-visualização da encomenda</div></div><div style="background:#fff;padding:18px;border-radius:14px;margin-top:15px"><h2>Olá, ${esc(data.morador_nome)}!</h2>${data.foto_url?`<img src="${esc(data.foto_url)}" style="width:100%;max-height:420px;object-fit:contain;border-radius:12px">`:'<p>Foto não disponível.</p>'}<p><b>Código:</b> ${esc(data.codigo)}<br><b>Unidade:</b> Bloco ${esc(data.bloco)} / Apto ${esc(data.apto)}<br><b>Status:</b> ${esc(data.status)}</p><p class="muted">Esta página serve apenas para conferência visual da encomenda.</p></div></div>`}catch(e){document.body.innerHTML=`<div style="padding:30px;font-family:Arial"><h2>Encomenda não encontrada</h2><p>Verifique o link recebido.</p></div>`}}
 loadPublicPreview();
 </script>
+
+<div id="td-auth" style="display:none">
+  <div class="authbox">
+    <div style="font-size:42px;text-align:center">🚪</div>
+    <h2 id="td-auth-title">Entrar no The Door</h2>
+    <p class="authsub" id="td-auth-sub">Acesse sua conta para entrar no sistema.</p>
+    <div id="td-login-form">
+      <label>E-mail</label><input id="td-login-email" type="email" autocomplete="username" placeholder="seu@email.com">
+      <label>Senha</label><input id="td-login-pass" type="password" autocomplete="current-password" placeholder="Sua senha">
+      <div id="td-login-msg" class="td-auth-msg"></div>
+      <button class="authbtn" id="td-login-btn" type="button">Entrar</button>
+      <button class="authbtn alt" id="td-show-register" type="button">Criar minha conta</button>
+    </div>
+    <div id="td-register-form" style="display:none">
+      <label>Nome</label><input id="td-reg-name" type="text" placeholder="Seu nome">
+      <label>Condomínio / empresa</label><input id="td-reg-cond" type="text" placeholder="Nome do condomínio ou empresa">
+      <label>WhatsApp</label><input id="td-reg-phone" type="tel" placeholder="(00) 00000-0000">
+      <label>E-mail</label><input id="td-reg-email" type="email" autocomplete="email" placeholder="seu@email.com">
+      <label>Senha</label><input id="td-reg-pass" type="password" autocomplete="new-password" placeholder="Crie uma senha">
+      <label>Confirmar senha</label><input id="td-reg-pass2" type="password" autocomplete="new-password" placeholder="Repita a senha">
+      <div id="td-reg-msg" class="td-auth-msg"></div>
+      <button class="authbtn" id="td-register-btn" type="button">Cadastrar conta</button>
+      <button class="authbtn alt" id="td-show-login" type="button">Já tenho uma conta</button>
+    </div>
+    <div class="td-auth-note">Versão inicial de autenticação. Para comercialização com vários clientes e acesso em diferentes dispositivos, o próximo passo é ligar esta tela a um banco de dados e autenticação online (por exemplo, Supabase).</div>
+  </div>
+</div>
+<script id="td-auth-script">
+(function(){
+  const KEY='theDoor_contas_v1', SESSION='theDoor_sessao_v1';
+  const $=id=>document.getElementById(id);
+  function accounts(){try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){return[]}}
+  function save(a){localStorage.setItem(KEY,JSON.stringify(a))}
+  function showLogin(){ $('td-login-form').style.display='block'; $('td-register-form').style.display='none'; $('td-auth-title').textContent='Entrar no The Door'; $('td-auth-sub').textContent='Acesse sua conta para entrar no sistema.'; }
+  function showRegister(){ $('td-login-form').style.display='none'; $('td-register-form').style.display='block'; $('td-auth-title').textContent='Criar conta'; $('td-auth-sub').textContent='Cadastre seus dados para começar a usar o The Door.'; }
+  function openAuth(){ $('td-auth').style.display='flex'; document.body.style.overflow='hidden'; showLogin(); }
+  function closeAuth(user){ $('td-auth').style.display='none'; document.body.style.overflow=''; $('td-account').style.display='flex'; $('td-user-name').textContent=user.nome+' • '+user.condominio; }
+  function current(){try{return JSON.parse(localStorage.getItem(SESSION)||'null')}catch(e){return null}}
+  function enter(u){localStorage.setItem(SESSION,JSON.stringify(u));closeAuth(u)}
+  $('td-show-register').onclick=showRegister; $('td-show-login').onclick=showLogin;
+  $('td-login-btn').onclick=function(){
+    const email=$('td-login-email').value.trim().toLowerCase(), pass=$('td-login-pass').value;
+    const u=accounts().find(x=>x.email===email && x.senha===pass);
+    if(!u){$('td-login-msg').textContent='E-mail ou senha inválidos.';return}
+    $('td-login-msg').textContent=''; enter(u);
+  };
+  $('td-register-btn').onclick=function(){
+    const nome=$('td-reg-name').value.trim(), cond=$('td-reg-cond').value.trim(), phone=$('td-reg-phone').value.trim(), email=$('td-reg-email').value.trim().toLowerCase(), pass=$('td-reg-pass').value, pass2=$('td-reg-pass2').value;
+    if(!nome||!cond||!email||!pass){$('td-reg-msg').textContent='Preencha nome, condomínio/empresa, e-mail e senha.';return}
+    if(pass.length<6){$('td-reg-msg').textContent='A senha deve ter pelo menos 6 caracteres.';return}
+    if(pass!==pass2){$('td-reg-msg').textContent='As senhas não conferem.';return}
+    const a=accounts(); if(a.some(x=>x.email===email)){ $('td-reg-msg').textContent='Este e-mail já está cadastrado.'; return; }
+    const u={id:'USR-'+Date.now(),nome,condominio:cond,whatsapp:phone,email,senha:pass,criadoEm:new Date().toISOString()};
+    a.push(u); save(a); enter(u);
+  };
+  $('td-logout').onclick=function(){localStorage.removeItem(SESSION);openAuth();};
+  window.addEventListener('load',function(){const u=current(); if(u) closeAuth(u); else openAuth();});
+})();
+</script>
+
 </body>
 </html>
