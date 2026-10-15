@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import {Html5Qrcode,Html5QrcodeSupportedFormats} from "html5-qrcode";
 import {PackagePlus,ScanLine,Users,History,Truck,MapPin,Trash2,Send,Search,Home,LogOut,Plus,CheckCircle2,Clock,ChevronRight,Pencil,UserPlus} from "lucide-react";
 import "./styles.css";
+import brandIcon from "./the-door-icon.png";
 
 const KEY="the-door-v1";
 const initial={
@@ -30,7 +31,7 @@ function App(){
  function scannedCheckout(value){const clean=value.trim();const o=orders.find(x=>x.status==="Pendente"&&(String(x.code).toLowerCase()===clean.toLowerCase()||String(x.tracking||"").toLowerCase()===clean.toLowerCase()));if(o){deliver(o.id);setScan(false)}else notify("Código não encontrado entre as encomendas pendentes.")}
  function sendWhatsApp(o){const r=data.residents.find(x=>x.id===o.residentId); if(!r)return; const msg=`Olá, ${r.name}! Sua encomenda ${o.code} foi recebida na portaria do condomínio. Apresente este código para retirada: ${o.code}`; window.open("https://wa.me/"+r.phone+"?text="+encodeURIComponent(msg),"_blank")}
  return <div className="app">
-  <header><div className="brand"><div className="logo">TD</div><div><b>THE DOOR</b><small>Gestão de encomendas</small></div></div><div className="header-actions"><button onClick={()=>setScan(true)}><ScanLine/> Ler código</button></div></header>
+  <header><div className="brand"><img className="brand-logo" src={brandIcon} alt="Logo The Door"/><div><b>THE DOOR</b><small>Logística de encomendas para condomínios</small></div></div><div className="header-actions"><button onClick={()=>setScan(true)}><ScanLine/> Ler código</button></div></header>
   <main>
    {tab==="home"&&<Dashboard pending={pending} orders={orders} onAdd={()=>setShowAdd(true)} onScan={()=>setScan(true)} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder}/>}
    {tab==="orders"&&<><SectionTitle icon={<History/>} title="Encomendas"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar código, morador, apartamento..."/></div><button className="primary" onClick={()=>setShowAdd(true)}><Plus/> Nova encomenda</button></div><OrderList orders={filtered} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder}/></>}
