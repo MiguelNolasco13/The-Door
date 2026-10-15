@@ -1,1 +1,1 @@
-{"name":"The Door","short_name":"The Door","start_url":"./","display":"standalone","background_color":"#f4efe6","theme_color":"#b58b3a","lang":"pt-BR"}
+{"name":"The Door - Gestão de encomendas","short_name":"The Door","start_url":"./","scope":"./","display":"standalone","background_color":"#ffffff","theme_color":"#0b5b9a","lang":"pt-BR","icons":[{"src":"./the-door-icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},{"src":"./the-door-icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"}]}
