@@ -1,0 +1,20 @@
+THE DOOR - LOGIN FIREBASE
+
+Esta versão adiciona:
+- Entrar com Google.
+- Entrar e criar conta com e-mail e senha.
+- Sair da conta.
+- Dados locais separados por usuário neste navegador.
+
+ANTES DE PUBLICAR:
+1. No Firebase Console > Authentication > Método de login, confirme Google ativado.
+2. Se quiser e-mail/senha, ative também o provedor E-mail/senha.
+3. Authentication > Configurações > Domínios autorizados: confirme miguelnolasco13.github.io.
+4. Envie o conteúdo desta pasta para a raiz do repositório GitHub The-Door e aguarde a Action concluir.
+5. Teste primeiro com uma conta Google autorizada.
+
+IMPORTANTE:
+- Esta versão usa Firebase Authentication, mas as encomendas, moradores e entregadores continuam salvos no localStorage do navegador. Os dados não são sincronizados entre computadores/funcionários.
+- O primeiro usuário que entrar neste navegador receberá a migração dos dados antigos locais, se houver.
+- Isso ainda NÃO implementa isolamento seguro por condomínio, permissões de plano ou cobrança. Para comercializar, precisamos migrar os dados para Firestore e criar regras de segurança por condomínio no servidor.
+- A configuração do Firebase Web é destinada ao cliente. Nunca coloque credenciais de conta de serviço ou chaves privadas no frontend.

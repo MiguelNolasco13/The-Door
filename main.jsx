@@ -1,12 +1,14 @@
 import React,{useEffect,useMemo,useRef,useState} from "react";
 import {createRoot} from "react-dom/client";
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
+import { auth } from "./firebase.js";
 import QRCode from "qrcode";
 import {Html5Qrcode,Html5QrcodeSupportedFormats} from "html5-qrcode";
 import {PackagePlus,ScanLine,Users,History,Truck,MapPin,Trash2,Send,Search,Home,LogOut,Plus,CheckCircle2,Clock,ChevronRight,Pencil,UserPlus} from "lucide-react";
 import "./styles.css";
 import brandIcon from "./the-door-icon.png";
 
-const KEY="the-door-v1";
+const KEY_PREFIX="the-door-v1-user-";
 const initial={
  residents:[
   {id:"m1",name:"João da Silva",phone:"21999990001",block:"B",street:"Rua 02",quadra:"Q1",apt:"204"},
@@ -14,13 +16,22 @@ const initial={
  ],
  couriers:[], orders:[]
 };
-function load(){try{return JSON.parse(localStorage.getItem(KEY))||initial}catch{return initial}}
+function load(userId){
+ try{
+  const own=localStorage.getItem(KEY_PREFIX+userId);
+  if(own) return JSON.parse(own)||initial;
+  // Migra os dados antigos deste navegador para a primeira conta que entrar.
+  const legacy=localStorage.getItem("the-door-v1");
+  if(legacy){localStorage.setItem(KEY_PREFIX+userId,legacy);localStorage.removeItem("the-door-v1");return JSON.parse(legacy)||initial;}
+  return initial;
+ }catch{return initial}
+}
 function uid(p="id"){return p+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,7)}
-function App(){
- const [data,setData]=useState(load); const [tab,setTab]=useState("home"); const [query,setQuery]=useState("");
+function AppContent({user,onLogout}){
+ const [data,setData]=useState(()=>load(user.uid)); const [tab,setTab]=useState("home"); const [query,setQuery]=useState("");
  const [showAdd,setShowAdd]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null);
  const [notice,setNotice]=useState("");
- useEffect(()=>localStorage.setItem(KEY,JSON.stringify(data)),[data]);
+ useEffect(()=>localStorage.setItem(KEY_PREFIX+user.uid,JSON.stringify(data)),[data,user.uid]);
  const orders=data.orders;
  const pending=orders.filter(o=>o.status==="Pendente");
  const filtered=useMemo(()=>orders.filter(o=>JSON.stringify(o).toLowerCase().includes(query.toLowerCase())),[orders,query]);
@@ -31,7 +42,7 @@ function App(){
  function scannedCheckout(value){const clean=value.trim();const o=orders.find(x=>x.status==="Pendente"&&(String(x.code).toLowerCase()===clean.toLowerCase()||String(x.tracking||"").toLowerCase()===clean.toLowerCase()));if(o){deliver(o.id);setScan(false)}else notify("Código não encontrado entre as encomendas pendentes.")}
  function sendWhatsApp(o){const r=data.residents.find(x=>x.id===o.residentId); if(!r)return; const msg=`Olá, ${r.name}! Sua encomenda ${o.code} foi recebida na portaria do condomínio. Apresente este código para retirada: ${o.code}`; window.open("https://wa.me/"+r.phone+"?text="+encodeURIComponent(msg),"_blank")}
  return <div className="app">
-  <header><div className="brand"><img className="brand-logo" src={brandIcon} alt="Logo The Door"/><div><b>THE DOOR</b><small>Logística de encomendas para condomínios</small></div></div><div className="header-actions"><button onClick={()=>setScan(true)}><ScanLine/> Ler código</button></div></header>
+  <header><div className="brand"><img className="brand-logo" src={brandIcon} alt="Logo The Door"/><div><b>THE DOOR</b><small>Logística de encomendas para condomínios</small></div></div><div className="header-actions"><span className="user-email">{user.email||user.displayName||"Usuário"}</span><button onClick={()=>setScan(true)}><ScanLine/> Ler código</button><button onClick={onLogout}><LogOut/> Sair</button></div></header>
   <main>
    {tab==="home"&&<Dashboard pending={pending} orders={orders} onAdd={()=>setShowAdd(true)} onScan={()=>setScan(true)} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder}/>}
    {tab==="orders"&&<><SectionTitle icon={<History/>} title="Encomendas"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar código, morador, apartamento..."/></div><button className="primary" onClick={()=>setShowAdd(true)}><Plus/> Nova encomenda</button></div><OrderList orders={filtered} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder}/></>}
@@ -82,5 +93,17 @@ function QrModal({order,resident,onClose}){
  const [src,setSrc]=useState("");const [error,setError]=useState("");
  useEffect(()=>{let alive=true;QRCode.toDataURL(order.code,{width:320,margin:2,errorCorrectionLevel:"M"}).then(url=>{if(alive)setSrc(url)}).catch(()=>setError("Não foi possível gerar o QR Code."));return()=>{alive=false}},[order.code]);
  return <Modal title="QR Code da encomenda" onClose={onClose}><div className="qr-card">{src?<img src={src} alt={`QR Code ${order.code}`}/>:<p>{error||"Gerando QR Code..."}</p>}<strong>{order.code}</strong><p>{resident?.name||order.residentName||"Morador"}</p><p>{resident?`${resident.block} • Apto ${resident.apt}`:order.address}</p>{order.tracking&&<small>Rastreio: {order.tracking}</small>}<button className="primary wide" onClick={()=>{if(!src)return;const w=window.open("","_blank");if(w){w.document.write(`<title>QR ${order.code}</title><div style="font-family:Arial;text-align:center;padding:24px"><h2>The Door - ${order.code}</h2><img src="${src}" style="width:280px;height:280px"/><p>${resident?.name||order.residentName||"Morador"}</p><p>${resident?`${resident.block} • Apto ${resident.apt}`:order.address||""}</p></div>`);w.document.close();w.focus();setTimeout(()=>w.print(),300)}}}>Imprimir QR Code</button></div></Modal>
+}
+function App(){
+ const [user,setUser]=useState(null); const [checking,setChecking]=useState(true);
+ useEffect(()=>onAuthStateChanged(auth,u=>{setUser(u);setChecking(false)}),[]);
+ if(checking) return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="The Door"/><h1>The Door</h1><p>Verificando sua sessão...</p></div></div>;
+ if(!user) return <LoginScreen/>;
+ return <AppContent user={user} onLogout={()=>signOut(auth)}/>;
+}
+function LoginScreen(){
+ const [mode,setMode]=useState("login"); const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [busy,setBusy]=useState(false); const [error,setError]=useState("");
+ async function run(action){setBusy(true);setError("");try{await action()}catch(e){const map={"auth/invalid-credential":"E-mail ou senha incorretos.","auth/user-not-found":"Conta não encontrada.","auth/wrong-password":"E-mail ou senha incorretos.","auth/email-already-in-use":"Este e-mail já possui cadastro.","auth/weak-password":"A senha deve ter pelo menos 6 caracteres.","auth/popup-closed-by-user":"A janela de login foi fechada.","auth/unauthorized-domain":"Este domínio não está autorizado no Firebase.","auth/operation-not-allowed":"Ative este método de login no Firebase Authentication."};setError(map[e.code]||`Não foi possível entrar. (${e.code||"erro"})`)}finally{setBusy(false)}}
+ return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="Logo The Door"/><div className="auth-eyebrow">LOGÍSTICA DE ENCOMENDAS</div><h1>Bem-vindo ao The Door</h1><p className="auth-subtitle">Entre para acessar a gestão de encomendas do seu condomínio.</p><button className="google-button" disabled={busy} onClick={()=>run(()=>signInWithPopup(auth,new GoogleAuthProvider()))}><span className="google-g">G</span> Continuar com Google</button><div className="auth-separator"><span>ou use seu e-mail</span></div><form className="auth-form" onSubmit={e=>{e.preventDefault();run(()=>mode==="register"?createUserWithEmailAndPassword(auth,email,password):signInWithEmailAndPassword(auth,email,password))}}><label>E-mail<input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="voce@exemplo.com"/></label><label>Senha<input type="password" autoComplete={mode==="register"?"new-password":"current-password"} value={password} onChange={e=>setPassword(e.target.value)} required minLength={6} placeholder="Mínimo de 6 caracteres"/></label>{error&&<p className="auth-error" role="alert">{error}</p>}<button className="primary wide" disabled={busy}>{busy?"Aguarde...":mode==="register"?"Criar conta":"Entrar"}</button></form><button className="auth-switch" onClick={()=>{setMode(mode==="register"?"login":"register");setError("")}}>{mode==="register"?"Já tem uma conta? Entrar":"Primeiro acesso? Criar conta com e-mail"}</button><p className="auth-footnote">Os dados desta versão ficam salvos neste navegador e perfil de usuário. A sincronização online entre funcionários e o controle de planos serão etapas posteriores.</p></div></div>
 }
 createRoot(document.getElementById("root")).render(<App/>);
