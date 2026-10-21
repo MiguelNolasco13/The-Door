@@ -27,8 +27,26 @@ function load(userId){
  }catch{return initial}
 }
 function uid(p="id"){return p+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,7)}
-function phoneForWhatsApp(phone){let n=String(phone||"").replace(/\D/g,"");if(n.startsWith("00"))n=n.slice(2);if(n.length===10||n.length===11)n="55"+n;return n}
-function openWhatsAppFromClick(phone,message){const n=phoneForWhatsApp(phone);const url="https://wa.me/"+(n&&n.length>=12?n:"")+"?text="+encodeURIComponent(message);const opened=window.open(url,"_blank");if(!opened)window.location.href=url}
+// WhatsApp gratuito: abre uma conversa com texto preenchido; o usuário confirma o envio.
+function phoneForWhatsApp(phone){
+ let n=String(phone||"").replace(/\D/g,"");
+ if(n.startsWith("00")) n=n.slice(2);
+ if(n.length===10||n.length===11) n="55"+n;
+ return n;
+}
+function whatsappUrl(phone,message){
+ const n=phoneForWhatsApp(phone);
+ if(!n||n.length<12) return null;
+ return "https://wa.me/"+n+"?text="+encodeURIComponent(message);
+}
+function openWhatsAppChat(phone,message){
+ const url=whatsappUrl(phone,message);
+ if(!url) return false;
+ // Abre em outra aba/janela para manter o The Door aberto no celular e computador.
+ const win=window.open(url,"_blank");
+ if(!win) return false;
+ return true;
+}
 function AppContent({user,onLogout}){
  const [data,setData]=useState(()=>load(user.uid)); const [tab,setTab]=useState("home"); const [query,setQuery]=useState("");
  const [showAdd,setShowAdd]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null);
@@ -38,11 +56,45 @@ function AppContent({user,onLogout}){
  const pending=orders.filter(o=>o.status==="Pendente");
  const filtered=useMemo(()=>orders.filter(o=>JSON.stringify(o).toLowerCase().includes(query.toLowerCase())),[orders,query]);
  function notify(x){setNotice(x);setTimeout(()=>setNotice(""),2500)}
- function addOrder(o){const newOrder={...o,id:uid("enc"),code:"TD-"+Math.random().toString(36).slice(2,8).toUpperCase(),status:"Pendente",receivedAt:new Date().toISOString()};setData(d=>({...d,orders:[newOrder,...d.orders]}));setShowAdd(false);const r=data.residents.find(x=>x.id===newOrder.residentId);if(r){const msg=`Olá, ${r.name}! Sua encomenda ${newOrder.code} está disponível para retirada na portaria. Apresente o QR Code da encomenda ou informe o código ${newOrder.tracking||newOrder.code} ao atendente. Obrigado!`;const n=phoneForWhatsApp(r.phone);if(n&&n.length>=12){openWhatsAppFromClick(r.phone,msg);notify("Encomenda salva. Confira o WhatsApp e toque em Enviar.")}else notify("Encomenda salva, mas confira o telefone do morador com DDD.")}else notify("Encomenda salva, mas não há morador vinculado.")}
+ function addOrder(o){
+  const newOrder={...o,id:uid("enc"),code:"TD-"+Math.random().toString(36).slice(2,8).toUpperCase(),status:"Pendente",receivedAt:new Date().toISOString()};
+  setData(d=>({...d,orders:[newOrder,...d.orders]}));
+  setShowAdd(false);
+  const r=data.residents.find(x=>x.id===newOrder.residentId);
+  if(!r){notify("Encomenda registrada. Vincule um morador para enviar o aviso pelo WhatsApp.");return}
+  const msg=`Olá, ${r.name}! Sua encomenda ${newOrder.code} está disponível para retirada na portaria. Apresente o QR Code da encomenda ou informe o código ${newOrder.tracking||newOrder.code} ao atendente. Obrigado!`;
+  if(!phoneForWhatsApp(r.phone)||phoneForWhatsApp(r.phone).length<12){notify("Encomenda salva. Confira o telefone do morador com DDD e código do país.");return}
+  if(openWhatsAppChat(r.phone,msg)) notify("Encomenda salva. Confira a conversa do WhatsApp e toque em Enviar.");
+  else notify("Encomenda salva. O navegador bloqueou a nova janela. Use o botão WhatsApp na encomenda para tentar novamente.");
+ }
  function removeOrder(id){if(confirm("Excluir esta encomenda?"))setData(d=>({...d,orders:d.orders.filter(o=>o.id!==id)}))}
- function deliver(id){setData(d=>({...d,orders:d.orders.map(o=>o.id===id?{...o,status:"Retirada",pickedAt:new Date().toISOString(),pickupMethod:"manual"}:o)}));notify("Encomenda baixada. Acesse o Histórico para enviar a confirmação pelo WhatsApp.")}
- function scannedCheckout(value){const clean=value.trim();const o=orders.find(x=>x.status==="Pendente"&&(String(x.code).toLowerCase()===clean.toLowerCase()||String(x.tracking||"").toLowerCase()===clean.toLowerCase()));if(o){const method=String(o.code).toLowerCase()===clean.toLowerCase()?"QR Code":"código de barras";setData(d=>({...d,orders:d.orders.map(x=>x.id===o.id?{...x,status:"Retirada",pickedAt:new Date().toISOString(),pickupMethod:method}:x)}));setScan(false);setQrOrder(null);const r=data.residents.find(x=>x.id===o.residentId);if(r){const msg=`Olá, ${r.name}! Confirmamos que sua encomenda ${o.code} foi retirada na portaria por ${method==="QR Code"?"meio do QR Code":"meio do código de barras"}. Obrigado!`;openWhatsAppFromClick(r.phone,msg)}else notify("Retirada registrada, mas não há morador vinculado para enviar a confirmação.")}else notify("Código não encontrado entre as encomendas pendentes.")}
- function openWhatsApp(phone,msg){const n=phoneForWhatsApp(phone);if(!n||n.length<12){notify("Confira o telefone do morador com DDD antes de enviar pelo WhatsApp.");return}openWhatsAppFromClick(phone,msg)}
+ function deliver(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o)return;
+  const picked={...o,status:"Retirada",pickedAt:new Date().toISOString(),pickupMethod:"manual"};
+  setData(d=>({...d,orders:d.orders.map(x=>x.id===id?picked:x)}));
+  const r=data.residents.find(x=>x.id===o.residentId);
+  if(!r){notify("Retirada registrada. Não há morador vinculado para enviar a confirmação.");return}
+  const msg=`Olá, ${r.name}! Confirmamos que sua encomenda ${o.code} foi retirada na portaria. Obrigado!`;
+  if(!phoneForWhatsApp(r.phone)||phoneForWhatsApp(r.phone).length<12){notify("Retirada registrada. Confira o telefone do morador com DDD.");return}
+  if(openWhatsAppChat(r.phone,msg))notify("Retirada registrada. Confira a conversa do WhatsApp e toque em Enviar.");
+  else notify("Retirada registrada. Use o botão de confirmação pelo WhatsApp no Histórico.");
+ }
+ function scannedCheckout(value){
+  const clean=value.trim();
+  const o=orders.find(x=>x.status==="Pendente"&&(String(x.code).toLowerCase()===clean.toLowerCase()||String(x.tracking||"").toLowerCase()===clean.toLowerCase()));
+  if(!o){notify("Código não encontrado entre as encomendas pendentes.");return}
+  const method=String(o.code).toLowerCase()===clean.toLowerCase()?"QR Code":"código de barras";
+  setData(d=>({...d,orders:d.orders.map(x=>x.id===o.id?{...x,status:"Retirada",pickedAt:new Date().toISOString(),pickupMethod:method}:x)}));
+  setScan(false);setQrOrder(null);
+  const r=data.residents.find(x=>x.id===o.residentId);
+  if(!r){notify("Retirada registrada, mas não há morador vinculado para enviar a confirmação.");return}
+  const msg=`Olá, ${r.name}! Confirmamos que sua encomenda ${o.code} foi retirada na portaria por ${method==="QR Code"?"meio do QR Code":"meio do código de barras"}. Obrigado!`;
+  if(!phoneForWhatsApp(r.phone)||phoneForWhatsApp(r.phone).length<12){notify("Retirada registrada. Confira o telefone do morador com DDD.");return}
+  if(openWhatsAppChat(r.phone,msg)) notify("Retirada registrada. Confira a conversa do WhatsApp e toque em Enviar.");
+  else notify("Retirada registrada. Use a confirmação pelo WhatsApp no Histórico.");
+ }
+ function openWhatsApp(phone,msg){if(!whatsappUrl(phone,msg)){notify("Confira o telefone do morador com DDD e código do país antes de enviar pelo WhatsApp.");return}if(!openWhatsAppChat(phone,msg))notify("O navegador bloqueou a nova janela. Permita pop-ups para o The Door e tente novamente.")}
   function sendWhatsApp(o){const r=data.residents.find(x=>x.id===o.residentId);if(!r){notify("Cadastre ou vincule um morador para enviar a mensagem.");return}const msg=`Olá, ${r.name}! Sua encomenda ${o.code} está disponível para retirada na portaria. Apresente o QR Code desta encomenda ou informe o código ${o.tracking||o.code} ao atendente. Obrigado!`;openWhatsApp(r.phone,msg)}
   function sendPickupConfirmation(o,method){const r=data.residents.find(x=>x.id===o.residentId);if(!r){notify("Retirada registrada, mas não foi possível enviar a mensagem: morador sem telefone vinculado.");return}const msg=`Olá, ${r.name}! Confirmamos que sua encomenda ${o.code} foi retirada na portaria por ${method==="QR Code"?"meio do QR Code":"meio do código de barras"}. Obrigado!`;openWhatsApp(r.phone,msg)}
  return <div className="app">
@@ -119,7 +171,7 @@ function Scanner({orders,onClose,onRead,title="Ler código de barras ou QR Code"
 function QrModal({order,resident,onClose}){
  const [src,setSrc]=useState("");const [error,setError]=useState("");
  useEffect(()=>{let alive=true;QRCode.toDataURL(order.code,{width:320,margin:2,errorCorrectionLevel:"M"}).then(url=>{if(alive)setSrc(url)}).catch(()=>setError("Não foi possível gerar o QR Code."));return()=>{alive=false}},[order.code]);
- return <Modal title="QR Code da encomenda" onClose={onClose}><div className="qr-card">{src?<img src={src} alt={`QR Code ${order.code}`}/>:<p>{error||"Gerando QR Code..."}</p>}<strong>{order.code}</strong><p>{resident?.name||order.residentName||"Morador"}</p><p>{resident?`${resident.block} • Apto ${resident.apt}`:order.address}</p>{order.tracking&&<small>Rastreio: {order.tracking}</small>}<button className="primary wide" onClick={async()=>{if(!src)return;try{const blob=await (await fetch(src)).blob();const file=new File([blob],`The-Door-${order.code}.png`,{type:"image/png"});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:`QR Code ${order.code}`,text:`QR Code da encomenda ${order.code}`});return}}catch(e){}const w=window.open("","_blank");if(w){w.document.write(`<title>QR ${order.code}</title><div style="font-family:Arial;text-align:center;padding:24px"><h2>The Door - ${order.code}</h2><img src="${src}" style="width:280px;height:280px"/><p>${resident?.name||order.residentName||"Morador"}</p><p>${resident?`${resident.block} • Apto ${resident.apt}`:order.address||""}</p></div>`);w.document.close();w.focus();setTimeout(()=>w.print(),300)}}}>Imprimir QR Code</button><button type="button" className="wide" onClick={async()=>{if(!src)return;const msg=`QR Code da encomenda ${order.code}. Apresente este código na portaria para retirada.`;try{const blob=await (await fetch(src)).blob();const file=new File([blob],`The-Door-${order.code}.png`,{type:"image/png"});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:`QR Code ${order.code}`,text:msg});return}const a=document.createElement("a");a.href=src;a.download=`The-Door-${order.code}.png`;a.click();openWhatsAppFromClick(resident?.phone||"",msg)}catch{window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank")}}}><Send/> Compartilhar QR Code</button><button type="button" className="wide" onClick={()=>{const msg=`Olá, ${resident?.name||order.residentName||"morador"}! Sua encomenda ${order.code} está disponível para retirada na portaria. Apresente o QR Code da encomenda no atendimento.`;openWhatsAppFromClick(resident?.phone||"",msg)}}><Send/> Enviar aviso pelo WhatsApp</button></div></Modal>
+ return <Modal title="QR Code da encomenda" onClose={onClose}><div className="qr-card">{src?<img src={src} alt={`QR Code ${order.code}`}/>:<p>{error||"Gerando QR Code..."}</p>}<strong>{order.code}</strong><p>{resident?.name||order.residentName||"Morador"}</p><p>{resident?`${resident.block} • Apto ${resident.apt}`:order.address}</p>{order.tracking&&<small>Rastreio: {order.tracking}</small>}<button className="primary wide" onClick={async()=>{if(!src)return;try{const blob=await (await fetch(src)).blob();const file=new File([blob],`The-Door-${order.code}.png`,{type:"image/png"});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:`QR Code ${order.code}`,text:`QR Code da encomenda ${order.code}`});return}}catch(e){}const w=window.open("","_blank");if(w){w.document.write(`<title>QR ${order.code}</title><div style="font-family:Arial;text-align:center;padding:24px"><h2>The Door - ${order.code}</h2><img src="${src}" style="width:280px;height:280px"/><p>${resident?.name||order.residentName||"Morador"}</p><p>${resident?`${resident.block} • Apto ${resident.apt}`:order.address||""}</p></div>`);w.document.close();w.focus();setTimeout(()=>w.print(),300)}}}>Imprimir QR Code</button><button type="button" className="wide" onClick={async()=>{if(!src)return;const msg=`Olá, ${resident?.name||order.residentName||"morador"}! Segue o QR Code da sua encomenda ${order.code}. Apresente este código na portaria para retirada.`;try{const blob=await (await fetch(src)).blob();const file=new File([blob],`The-Door-${order.code}.png`,{type:"image/png"});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:`QR Code ${order.code}`,text:msg});return}}catch(e){}const a=document.createElement("a");a.href=src;a.download=`The-Door-${order.code}.png`;a.click();const url=whatsappUrl(resident?.phone,msg);if(url)window.open(url,"_blank");else window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank")}}><Send/> Compartilhar QR Code</button><button type="button" className="wide" onClick={()=>{const msg=`Olá, ${resident?.name||order.residentName||"morador"}! Sua encomenda ${order.code} está disponível para retirada na portaria. Apresente o QR Code da encomenda no atendimento.`;const url=whatsappUrl(resident?.phone,msg);if(url){if(!openWhatsAppChat(resident?.phone,msg))window.open(url,"_blank")}else window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank")}}><Send/> Enviar aviso pelo WhatsApp</button></div></Modal>
 }
 function App(){
  const [user,setUser]=useState(null); const [checking,setChecking]=useState(true);
