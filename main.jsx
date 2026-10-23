@@ -1,35 +1,222 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-:root{--bg:#10100f;--panel:#22201c;--panel2:#2d2922;--border:#494033;--text:#f8f2e7;--muted:#b8ad9a;--gold:#d7a83e;--gold2:#f0c96c;--wood:#68482b;--wood-dark:#3b2b1e;--success:#86b99a;--danger:#e28b7f}
-*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--text)}button,input,select,textarea{font:inherit}button{border:0;cursor:pointer;transition:background .15s,transform .15s}button:active{transform:scale(.99)}.app{min-height:100vh;padding-bottom:82px;background:radial-gradient(ellipse at 50% 0%,#292116 0%,var(--bg) 52%)}header{height:66px;background:#171613;color:var(--text);display:flex;align-items:center;justify-content:space-between;padding:0 max(4%,calc((100% - 1240px)/2));position:sticky;top:0;z-index:5;border-bottom:1px solid #383126;box-shadow:0 5px 20px #0002}.brand{display:flex;align-items:center;gap:12px}.brand-logo{width:46px;height:46px;object-fit:contain;flex:0 0 auto;filter:drop-shadow(0 2px 4px #0005)}.logo{width:42px;height:42px;border-radius:13px;background:linear-gradient(145deg,var(--gold2),var(--gold));color:#261b0d;display:grid;place-items:center;font-weight:900;box-shadow:inset 0 1px #fff6}.brand b{display:block;letter-spacing:1.5px}.brand small{display:block;color:var(--muted);font-size:11px;margin-top:2px}.header-actions button{background:#2b251c;color:var(--gold2);border:1px solid #5a4629;padding:10px 14px;border-radius:10px;display:flex;gap:8px;align-items:center}.header-actions svg{width:18px;height:18px}main{max-width:1180px;margin:auto;padding:28px 4%}.hero{background:linear-gradient(135deg,#2f2419,#4a3420 60%,#292219);color:var(--text);border:1px solid #5a442a;border-radius:18px;padding:30px;display:flex;justify-content:space-between;gap:20px;align-items:center;box-shadow:0 12px 30px #0002}.eyebrow{font-size:11px;letter-spacing:2px;color:var(--gold2);font-weight:800}.hero h1{font-size:clamp(24px,3vw,32px);margin:8px 0}.hero p{color:#d1c2aa;margin-bottom:0}.hero-buttons{display:flex;gap:10px;flex-wrap:wrap}.primary{background:linear-gradient(135deg,var(--gold2),var(--gold));color:#261b0d;padding:11px 15px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:800;box-shadow:0 4px 12px #d7a83e20}.primary:hover{background:#f5d681}.hero button:not(.primary){background:#211d17;color:var(--text);border:1px solid #695338;padding:11px 15px;border-radius:10px;display:inline-flex;gap:8px;align-items:center}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:18px 0 30px}.stat{background:linear-gradient(145deg,#27231d,#211f1b);border:1px solid var(--border);border-radius:14px;padding:18px;display:flex;gap:14px;align-items:center;box-shadow:0 6px 20px #0001}.stat svg{color:var(--gold);width:23px;height:23px}.stat small,.card small{display:block;color:var(--muted);margin-top:5px;overflow-wrap:anywhere}.stat strong{font-size:25px;color:var(--gold2)}.section-title{display:flex;align-items:center;gap:9px;margin:25px 0 15px;color:var(--gold2)}.section-title svg{width:21px;height:21px}.section-title h2{font-size:20px;margin:0;color:var(--text)}.toolbar{display:flex;justify-content:space-between;gap:12px;margin-bottom:15px}.search{background:#1b1a17;border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;padding:0 11px;flex:1;max-width:600px;color:var(--muted)}.search input{border:0;outline:0;padding:12px;width:100%;background:transparent;color:var(--text)}.search input::placeholder,.form input::placeholder{color:#8d8374}.cards{display:grid;gap:10px}.card{background:linear-gradient(145deg,#27241f,#211f1b);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:0 6px 20px #00015}.card b{color:var(--text)}.order{display:flex;justify-content:space-between;gap:15px}.order-main{min-width:0}.code{font-size:12px;font-weight:800;color:var(--gold2);margin-bottom:7px}.badge{display:inline-block;margin-top:10px;background:#49391c;color:#f0c96c;padding:5px 9px;border:1px solid #735a2a;border-radius:99px;font-size:11px;font-weight:700}.badge.done{background:#1d3a2c;color:#9dd3ad;border-color:#315d43}.order-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.order-actions button{width:38px;height:38px;border-radius:9px;background:#393228;color:#e9dfce;border:1px solid #504536;display:grid;place-items:center}.order-actions button:hover{background:#4a3c2b}.order-actions .ok{color:#a6d5b1}.order-actions .danger{color:var(--danger)}.empty{padding:35px;background:#211f1b;border:1px dashed #5a4c39;border-radius:14px;text-align:center;color:var(--muted)}.overlay{position:fixed;inset:0;background:#000b;z-index:20;display:grid;place-items:center;padding:18px;backdrop-filter:blur(4px)}.modal{width:min(560px,100%);max-height:90vh;overflow:auto;background:#211f1b;color:var(--text);border:1px solid #594832;border-radius:18px;padding:20px;box-shadow:0 24px 80px #0008}.modalhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;border-bottom:1px solid #41382c;padding-bottom:12px}.modalhead h3{margin:0}.modalhead button{font-size:25px;background:none;color:var(--muted)}.form{display:grid;gap:12px}.form label{font-size:13px;font-weight:700;color:#e7d8bd}.form input,.form select,.form textarea{width:100%;margin-top:6px;border:1px solid #514638;background:#171613;color:var(--text);border-radius:9px;padding:11px;outline:none}.form input:focus,.form select:focus,.form textarea:focus{border-color:var(--gold)}.form textarea{min-height:80px;resize:vertical}.wide{width:100%;justify-content:center;margin-top:6px}.scanmsg{text-align:center;color:var(--muted)}nav{position:fixed;bottom:0;left:0;right:0;height:72px;background:#171613;border-top:1px solid #3e3529;display:flex;justify-content:center;gap:3px;z-index:10;box-shadow:0 -8px 25px #0003}nav button{background:none;color:#9f9482;min-width:90px;padding:5px 9px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:11px}nav button svg{width:19px;height:19px}nav button.active{color:var(--gold2);font-weight:800;position:relative}nav button.active:before{content:"";position:absolute;top:0;width:32px;height:3px;border-radius:0 0 4px 4px;background:var(--gold)}.toast{position:fixed;right:20px;bottom:90px;background:#332719;color:#fff0d0;border:1px solid #74572d;padding:12px 16px;border-radius:10px;z-index:30;box-shadow:0 8px 24px #0005}.scan-field{display:flex;gap:8px;align-items:center}.scan-field input{flex:1;min-width:0}.scan-field button{margin-top:6px;padding:10px 12px;border-radius:9px;background:#393126;color:var(--gold2);border:1px solid #5b4931;display:flex;align-items:center;gap:6px}.hint{font-size:12px;line-height:1.5;color:var(--muted);margin:0}.qr-card{text-align:center;display:grid;justify-items:center;gap:8px}.qr-card img{width:min(280px,100%);height:auto;image-rendering:pixelated;background:#fff;padding:8px;border-radius:10px}.qr-card p{margin:0;color:#d0c3ae}.qr-card strong{font-size:20px;color:var(--gold2)}.qr-card small{color:var(--muted)}#qr-reader{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#171613}#qr-reader video{border-radius:8px}
-@media(max-width:700px){header{height:62px;padding:0 4%}.brand b{font-size:14px}.brand small{font-size:10px}.header-actions button{padding:9px}.hero{display:block;padding:22px}.hero-buttons{margin-top:20px}.hero-buttons button{flex:1}.stats{grid-template-columns:1fr;gap:9px}.stat{padding:14px}.toolbar{display:block}.toolbar .primary{margin-top:10px;width:100%}.search{max-width:none}.order{display:block}.order-actions{margin-top:12px}.order-actions button{flex:1}nav{height:70px;justify-content:space-around}nav button{min-width:0;flex:1;padding:4px 2px;font-size:10px}main{padding:20px 4%}.modal{padding:16px}.section-title h2{font-size:18px}}
+import React,{useEffect,useMemo,useRef,useState} from "react";
+import {createRoot} from "react-dom/client";
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
+import { auth } from "./firebase.js";
+import QRCode from "qrcode";
+import {Html5Qrcode,Html5QrcodeSupportedFormats} from "html5-qrcode";
+import {PackagePlus,ScanLine,Users,History,Truck,MapPin,Trash2,Send,Search,Home,LogOut,Plus,CheckCircle2,Clock,ChevronRight,Pencil,UserPlus,MessageSquare} from "lucide-react";
+import "./styles.css";
+import brandIcon from "./the-door-icon.png";
 
-/* Cadastro de moradores agrupado por unidade */
-.unit-list{display:grid;gap:14px}
-.unit-card{padding:0;overflow:hidden}
-.unit-heading{display:flex;align-items:center;gap:12px;padding:16px;background:linear-gradient(120deg,#30271c,#24211b);border-bottom:1px solid var(--border)}
-.unit-icon{width:42px;height:42px;flex:0 0 42px;display:grid;place-items:center;border-radius:12px;background:#44341f;color:var(--gold2)}
-.unit-title{flex:1;min-width:0}
-.unit-title b{display:block;font-size:15px}
-.unit-title small{display:block;color:var(--muted);margin-top:4px}
-.unit-add,.edit-resident{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#3a3022;color:var(--gold2);border:1px solid #665033;border-radius:9px;padding:9px 11px;font-size:12px;font-weight:700;white-space:nowrap}
-.unit-add svg,.edit-resident svg{width:15px;height:15px}
-.unit-residents{padding:4px 16px}
-.resident-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0;border-bottom:1px solid #3c3429}
-.resident-row:last-child{border-bottom:0}
-.resident-info{min-width:0}
-.resident-info b{display:block;overflow-wrap:anywhere}
-.resident-info small{display:block;color:var(--muted);margin-top:5px;overflow-wrap:anywhere}
-.edit-resident{background:transparent;color:#e5d4b6;border-color:#554936}
-@media(max-width:520px){.unit-heading{align-items:flex-start;flex-wrap:wrap}.unit-title{min-width:calc(100% - 60px)}.unit-add{margin-left:54px}.resident-row{align-items:flex-start}.edit-resident{padding:8px;font-size:11px}.toolbar .search{margin-bottom:4px}}
+const KEY_PREFIX="the-door-v1-user-";
+const initial={
+ residents:[
+  {id:"m1",name:"João da Silva",phone:"21999990001",block:"B",street:"Rua 02",quadra:"Q1",apt:"204"},
+  {id:"m2",name:"Maria Oliveira",phone:"21988880002",block:"A",street:"Rua 01",quadra:"Q1",apt:"101"}
+ ],
+ couriers:[], orders:[]
+};
+function load(userId){
+ try{
+  const own=localStorage.getItem(KEY_PREFIX+userId);
+  if(own) return JSON.parse(own)||initial;
+  // Migra os dados antigos deste navegador para a primeira conta que entrar.
+  const legacy=localStorage.getItem("the-door-v1");
+  if(legacy){localStorage.setItem(KEY_PREFIX+userId,legacy);localStorage.removeItem("the-door-v1");return JSON.parse(legacy)||initial;}
+  return initial;
+ }catch{return initial}
+}
+function uid(p="id"){return p+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,7)}
+// WhatsApp gratuito: abre uma conversa com texto preenchido; o usuário confirma o envio.
+function phoneForWhatsApp(phone){
+ let n=String(phone||"").replace(/\D/g,"");
+ if(n.startsWith("00")) n=n.slice(2);
+ if(n.length===10||n.length===11) n="55"+n;
+ return n;
+}
+function whatsappUrl(phone,message){
+ const n=phoneForWhatsApp(phone);
+ if(!n||n.length<12) return null;
+ return "https://wa.me/"+n+"?text="+encodeURIComponent(message);
+}
+function openWhatsAppChat(phone,message){
+ const url=whatsappUrl(phone,message);
+ if(!url) return false;
+ // Abre em outra aba/janela para manter o The Door aberto no celular e computador.
+ const win=window.open(url,"_blank");
+ if(!win) return false;
+ return true;
+}
+function AppContent({user,onLogout}){
+ const [data,setData]=useState(()=>load(user.uid)); const [tab,setTab]=useState("home"); const [query,setQuery]=useState("");
+ const [showAdd,setShowAdd]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null);
+ const [notice,setNotice]=useState(""); const [editingNotification,setEditingNotification]=useState(null);
+ useEffect(()=>localStorage.setItem(KEY_PREFIX+user.uid,JSON.stringify(data)),[data,user.uid]);
+ const orders=data.orders;
+ const pending=orders.filter(o=>o.status==="Pendente");
+ const notificationQueue=orders.filter(o=>o.status==="Pendente"&&o.notificationStatus!=="sent");
+ const filtered=useMemo(()=>orders.filter(o=>JSON.stringify(o).toLowerCase().includes(query.toLowerCase())),[orders,query]);
+ function notify(x){setNotice(x);setTimeout(()=>setNotice(""),2500)}
+ function notificationMessage(order, kind="arrival"){
+  const r=data.residents.find(x=>x.id===order.residentId);
+  if(!r)return null;
+  if(kind==="pickup")return `Olá, ${r.name}! Confirmamos que sua encomenda ${order.code} foi retirada na portaria. Obrigado!`;
+  const template=order.customMessage||"Olá, {morador}! Sua encomenda {codigo} está disponível para retirada na portaria. Apresente o QR Code da encomenda ou informe o código {rastreio} ao atendente. Obrigado!";
+  return String(template).replaceAll("{morador}",r.name||"morador").replaceAll("{codigo}",order.code||"").replaceAll("{rastreio}",order.tracking||order.code||"");
+ }
+ function saveEditedNotification(id,message){
+  setData(d=>({...d,orders:d.orders.map(o=>o.id===id?{...o,customMessage:message.trim()}:o)}));
+  setEditingNotification(null);notify("Mensagem atualizada. Ela estará pronta ao abrir o WhatsApp.");
+ }
+ function addOrder(o){
+  const {notificationChoice="later",...orderFields}=o;
+  const newOrder={...orderFields,id:uid("enc"),code:"TD-"+Math.random().toString(36).slice(2,8).toUpperCase(),status:"Pendente",receivedAt:new Date().toISOString(),notificationStatus:"pending"};
+  setData(d=>({...d,orders:[newOrder,...d.orders]}));
+  setShowAdd(false);
+  if(notificationChoice==="now"){
+   const r=data.residents.find(x=>x.id===newOrder.residentId);
+   const msg=notificationMessage(newOrder);
+   if(!r){notify("Encomenda salva na fila. Vincule um morador para enviar o aviso.");setTab("notifications");return}
+   if(!phoneForWhatsApp(r.phone)||phoneForWhatsApp(r.phone).length<12){notify("Encomenda salva na fila. Confira o telefone do morador com DDD e código do país.");setTab("notifications");return}
+   if(openWhatsAppChat(r.phone,msg)) notify("WhatsApp aberto. Depois de tocar em Enviar, volte ao The Door e marque o aviso como enviado na Central de Notificações.");
+   else notify("Encomenda salva na fila. O navegador bloqueou a janela; abra o aviso pela Central de Notificações.");
+  }else notify("Encomenda cadastrada. O aviso ficou guardado na Central de Notificações.");
+ }
+ function openQueuedNotification(order){
+  const r=data.residents.find(x=>x.id===order.residentId);
+  if(!r){notify("Não há morador vinculado a esta encomenda.");return}
+  const msg=notificationMessage(order);
+  if(!phoneForWhatsApp(r.phone)||phoneForWhatsApp(r.phone).length<12){notify("Confira o telefone do morador com DDD e código do país.");return}
+  if(openWhatsAppChat(r.phone,msg))notify("Conversa aberta. Envie a mensagem no WhatsApp e depois volte para marcar como enviada.");
+  else notify("Não foi possível abrir a conversa. Permita pop-ups e tente novamente.");
+ }
+ function markNotificationSent(id){
+  setData(d=>({...d,orders:d.orders.map(o=>o.id===id?{...o,notificationStatus:"sent",notifiedAt:new Date().toISOString()}:o)}));
+  notify("Aviso marcado como enviado.");
+ }
+ function removeOrder(id){if(confirm("Excluir esta encomenda?"))setData(d=>({...d,orders:d.orders.filter(o=>o.id!==id)}))}
+ function deliver(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o)return;
+  const picked={...o,status:"Retirada",pickedAt:new Date().toISOString(),pickupMethod:"manual"};
+  setData(d=>({...d,orders:d.orders.map(x=>x.id===id?picked:x)}));
+  const r=data.residents.find(x=>x.id===o.residentId);
+  if(!r){notify(o.notificationStatus!=="sent"?"Retirada registrada. O aviso pendente foi removido da fila; não há morador vinculado para a confirmação.":"Retirada registrada. Não há morador vinculado para enviar a confirmação.");return}
+  const msg=`Olá, ${r.name}! Confirmamos que sua encomenda ${o.code} foi retirada na portaria. Obrigado!`;
+  if(!phoneForWhatsApp(r.phone)||phoneForWhatsApp(r.phone).length<12){notify("Retirada registrada. O aviso pendente foi removido da fila. Confira o telefone do morador com DDD.");return}
+  if(openWhatsAppChat(r.phone,msg))notify("Retirada registrada. O aviso pendente saiu da fila. Confira a conversa do WhatsApp e toque em Enviar.");
+  else notify("Retirada registrada. O aviso pendente saiu da fila. Use a confirmação pelo WhatsApp no Histórico.");
+ }
+ function scannedCheckout(value){
+  const clean=value.trim();
+  const o=orders.find(x=>x.status==="Pendente"&&(String(x.code).toLowerCase()===clean.toLowerCase()||String(x.tracking||"").toLowerCase()===clean.toLowerCase()));
+  if(!o){notify("Código não encontrado entre as encomendas pendentes.");return}
+  const method=String(o.code).toLowerCase()===clean.toLowerCase()?"QR Code":"código de barras";
+  setData(d=>({...d,orders:d.orders.map(x=>x.id===o.id?{...x,status:"Retirada",pickedAt:new Date().toISOString(),pickupMethod:method}:x)}));
+  setScan(false);setQrOrder(null);
+  const r=data.residents.find(x=>x.id===o.residentId);
+  if(!r){notify(o.notificationStatus!=="sent"?"Retirada registrada. O aviso pendente foi removido da fila; morador não vinculado para confirmação.":"Retirada registrada, mas não há morador vinculado para enviar a confirmação.");return}
+  const msg=`Olá, ${r.name}! Confirmamos que sua encomenda ${o.code} foi retirada na portaria por ${method==="QR Code"?"meio do QR Code":"meio do código de barras"}. Obrigado!`;
+  if(!phoneForWhatsApp(r.phone)||phoneForWhatsApp(r.phone).length<12){notify("Retirada registrada. O aviso pendente foi removido da fila. Confira o telefone do morador com DDD.");return}
+  if(openWhatsAppChat(r.phone,msg)) notify("Retirada registrada. O aviso pendente saiu da fila. Confira a conversa do WhatsApp e toque em Enviar.");
+  else notify("Retirada registrada. O aviso pendente saiu da fila. Use a confirmação pelo WhatsApp no Histórico.");
+ }
+ function openWhatsApp(phone,msg){if(!whatsappUrl(phone,msg)){notify("Confira o telefone do morador com DDD e código do país antes de enviar pelo WhatsApp.");return}if(!openWhatsAppChat(phone,msg))notify("O navegador bloqueou a nova janela. Permita pop-ups para o The Door e tente novamente.")}
+  function sendWhatsApp(o){const r=data.residents.find(x=>x.id===o.residentId);if(!r){notify("Cadastre ou vincule um morador para enviar a mensagem.");return}const msg=`Olá, ${r.name}! Sua encomenda ${o.code} está disponível para retirada na portaria. Apresente o QR Code desta encomenda ou informe o código ${o.tracking||o.code} ao atendente. Obrigado!`;openWhatsApp(r.phone,msg)}
+  function sendPickupConfirmation(o,method){const r=data.residents.find(x=>x.id===o.residentId);if(!r){notify("Retirada registrada, mas não foi possível enviar a mensagem: morador sem telefone vinculado.");return}const msg=`Olá, ${r.name}! Confirmamos que sua encomenda ${o.code} foi retirada na portaria por ${method==="QR Code"?"meio do QR Code":"meio do código de barras"}. Obrigado!`;openWhatsApp(r.phone,msg)}
+ return <div className="app">
+  <header><div className="brand"><img className="brand-logo" src={brandIcon} alt="Logo The Door"/><div><b>THE DOOR</b><small>Logística de encomendas para condomínios</small></div></div><div className="header-actions"><span className="user-email">{user.email||user.displayName||"Usuário"}</span><button onClick={()=>setScan(true)}><ScanLine/> Ler código</button><button onClick={onLogout}><LogOut/> Sair</button></div></header>
+  <main>
+   {tab==="home"&&<Dashboard pending={pending} orders={orders} onAdd={()=>setShowAdd(true)} onScan={()=>setScan(true)} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder}/>}
+   {tab==="orders"&&<><SectionTitle icon={<History/>} title="Encomendas"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar código, morador, apartamento..."/></div><button className="primary" onClick={()=>setShowAdd(true)}><Plus/> Nova encomenda</button></div><OrderList orders={filtered} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation}/></>}
+   {tab==="residents"&&<><SectionTitle icon={<Users/>} title="Moradores por unidade"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar nome, telefone, bloco ou apartamento..."/></div><button className="primary" onClick={()=>{setResidentEdit(null);setResidentUnit(null);setShowResident(true)}}><Plus/> Cadastrar morador</button></div><div className="unit-list">{Object.entries(data.residents.filter(r=>JSON.stringify(r).toLowerCase().includes(query.toLowerCase())).reduce((groups,r)=>{const key=[r.block,r.street,r.quadra,r.apt].map(v=>(v||"").trim().toLowerCase()).join("|");if(!groups[key])groups[key]={key,block:r.block,street:r.street,quadra:r.quadra,apt:r.apt,residents:[]};groups[key].residents.push(r);return groups;},{})).sort((a,b)=>`${a[1].street} ${a[1].quadra} ${a[1].block} ${a[1].apt}`.localeCompare(`${b[1].street} ${b[1].quadra} ${b[1].block} ${b[1].apt}`,"pt-BR")).map(([key,u])=><div className="card unit-card" key={key}><div className="unit-heading"><div className="unit-icon"><MapPin/></div><div className="unit-title"><b>Unidade {u.apt||"não informada"}</b><small>{[u.block&&`Bloco ${u.block}`,u.street,u.quadra&&`Quadra ${u.quadra}`].filter(Boolean).join(" • ")||"Endereço não informado"}</small><small>{u.residents.length} morador(es) cadastrado(s)</small></div><button className="unit-add" onClick={()=>{setResidentEdit(null);setResidentUnit(u);setShowResident(true)}}><UserPlus/> Adicionar</button></div><div className="unit-residents">{u.residents.map(r=><div className="resident-row" key={r.id}><div className="resident-info"><b>{r.name}</b><small>WhatsApp: {r.phone||"Não informado"}</small></div><button className="edit-resident" title="Editar morador" onClick={()=>{setResidentEdit(r);setResidentUnit(null);setShowResident(true)}}><Pencil/> Editar</button></div>)}</div></div>)}</div>{data.residents.length===0&&<div className="empty">Nenhum morador cadastrado. Use “Cadastrar morador” para começar.</div>}</>}
+   {tab==="notifications"&&<><SectionTitle icon={<MessageSquare/>} title="Central de Notificações"/><div className="notification-intro card"><b>{notificationQueue.length} aviso(s) pendente(s)</b><small>Abra cada conversa, envie a mensagem no WhatsApp e depois marque o aviso como enviado. Encomendas retiradas saem automaticamente desta fila.</small></div>{notificationQueue.length===0?<div className="empty">Nenhum aviso pendente. Os novos avisos cadastrados para envio posterior aparecerão aqui.</div>:<div className="cards">{notificationQueue.map(o=>{const r=data.residents.find(x=>x.id===o.residentId);return <div className="card notification-card" key={o.id}><div className="order-main"><div className="code">{o.code}</div><b>{r?.name||o.residentName||"Morador não vinculado"}</b><small>{r?`Bloco ${r.block||"—"} • Apto ${r.apt||"—"}`:o.address||"Unidade não informada"}</small><small>Recebida: {new Date(o.receivedAt).toLocaleString("pt-BR")}</small><span className="badge">Aviso pendente</span></div><div className="notification-actions"><button onClick={()=>setEditingNotification(o)}><Pencil size={16}/> Editar mensagem</button><button className="primary" onClick={()=>openQueuedNotification(o)}><Send size={16}/> Abrir WhatsApp</button><button onClick={()=>{if(confirm("Confirma que a mensagem foi enviada pelo WhatsApp?"))markNotificationSent(o.id)}}><CheckCircle2 size={16}/> Marcar enviada</button></div></div>})}</div>}</>}
+   {tab==="couriers"&&<><SectionTitle icon={<Truck/>} title="Entregadores"/><div className="toolbar"><button className="primary" onClick={()=>setShowCourier(true)}><Plus/> Cadastrar entregador</button></div><div className="cards">{data.couriers.map(c=><div className="card" key={c.id}><b>{c.name}</b><small>{c.company||"Sem empresa"} • {c.phone||"Sem telefone"}</small><small>Documento: {c.doc||"—"} • Placa: {c.plate||"—"}</small></div>)}</div></>}
+   {tab==="history"&&<><SectionTitle icon={<History/>} title="Histórico de retiradas"/><OrderList orders={orders.filter(o=>o.status==="Retirada")} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation}/></>}
+  </main>
+  <nav>{[["home","Início",Home],["orders","Encomendas",History],["notifications","Avisos",MessageSquare],["residents","Moradores",Users],["couriers","Entregadores",Truck],["history","Histórico",Clock]].map(([k,l,I])=><button className={tab===k?"active":""} onClick={()=>setTab(k)} key={k}><I/><span>{l}</span></button>)}</nav>
+  {showAdd&&<AddOrder data={data} onClose={()=>setShowAdd(false)} onSave={addOrder}/>}
+  {editingNotification&&<EditNotification order={editingNotification} resident={data.residents.find(r=>r.id===editingNotification.residentId)} initialMessage={notificationMessage(editingNotification)} onClose={()=>setEditingNotification(null)} onSave={message=>saveEditedNotification(editingNotification.id,message)}/>}
+  {showResident&&<ResidentForm resident={residentEdit} unit={residentUnit} onClose={()=>{setShowResident(false);setResidentEdit(null);setResidentUnit(null)}} onSave={r=>{setData(d=>({...d,residents:residentEdit?d.residents.map(old=>old.id===residentEdit.id?{...old,...r,id:old.id}:old):[...d.residents,{...r,id:uid("mor")}] }));setShowResident(false);setResidentEdit(null);setResidentUnit(null);notify(residentEdit?"Morador atualizado com sucesso.":"Morador cadastrado na unidade.")}}/>}
+  {showCourier&&<CourierForm onClose={()=>setShowCourier(false)} onSave={c=>{setData(d=>({...d,couriers:[...d.couriers,{...c,id:uid("ent")}] }));setShowCourier(false)}}/>}
+  {scan&&<Scanner orders={orders} onClose={()=>setScan(false)} onRead={scannedCheckout}/>}
+  {qrOrder&&<QrModal order={qrOrder} resident={data.residents.find(r=>r.id===qrOrder.residentId)} onClose={()=>setQrOrder(null)}/> }
+  {notice&&<div className="toast">{notice}</div>}
+ </div>
+}
+function SectionTitle({icon,title}){return <div className="section-title">{icon}<h2>{title}</h2></div>}
+function Dashboard({pending,orders,onAdd,onScan,onWhats,onDeliver,onDelete,onShowQr}){
+ return <><div className="hero"><div><span className="eyebrow">PORTARIA</span><h1>Controle de encomendas</h1><p>Receba, notifique e dê baixa com QR Code.</p></div><div className="hero-buttons"><button className="primary" onClick={onAdd}><PackagePlus/> Nova encomenda</button><button onClick={onScan}><ScanLine/> Ler QR</button></div></div>
+ <div className="stats"><Stat icon={<Clock/>} label="Aguardando" value={pending.length}/><Stat icon={<PackagePlus/>} label="Recebidas" value={orders.length}/><Stat icon={<CheckCircle2/>} label="Retiradas" value={orders.filter(o=>o.status==="Retirada").length}/></div>
+ <SectionTitle icon={<Clock/>} title="Aguardando retirada"/><OrderList orders={pending.slice(0,6)} data={null} onWhats={onWhats} onDeliver={onDeliver} onDelete={onDelete} onShowQr={onShowQr}/>
+ </>}
+function Stat({icon,label,value}){return <div className="stat">{icon}<div><small>{label}</small><strong>{value}</strong></div></div>}
+function OrderList({orders,data,onWhats,onDeliver,onDelete,onShowQr,onConfirmPickup}){
+ if(!orders.length)return <div className="empty">Nenhuma encomenda encontrada.</div>;
+ return <div className="cards">{orders.map(o=><OrderCard key={o.id} o={o} data={data} onWhats={onWhats} onDeliver={onDeliver} onDelete={onDelete} onShowQr={onShowQr} onConfirmPickup={onConfirmPickup}/>)}</div>
+}
+function OrderCard({o,data,onWhats,onDeliver,onDelete,onShowQr,onConfirmPickup}){
+ const resident=data?.residents?.find(r=>r.id===o.residentId); return <div className="card order">{o.photo&&<img className="order-photo" src={o.photo} alt="Foto da encomenda" style={{width:88,height:88,objectFit:"cover",borderRadius:10,flexShrink:0}}/>}<div className="order-main"><div className="code">Código The Door: {o.code}</div>{o.tracking&&<small>Código de barras/rastreio: {o.tracking}</small>}<b>{resident?.name||o.residentName||"Morador"}</b><small>{resident?`${resident.block} • Apto ${resident.apt} • ${resident.street} • ${resident.quadra}`:o.address}</small><small>Recebida: {new Date(o.receivedAt).toLocaleString("pt-BR")}</small><span className={o.status==="Retirada"?"badge done":"badge"}>{o.status}</span></div><div className="order-actions">{onShowQr&&<button title="Ver QR Code próprio" onClick={()=>onShowQr(o)}><ScanLine/></button>}{o.status==="Pendente"&&<button title="WhatsApp" onClick={()=>onWhats(o)}><Send/></button>}{o.status==="Retirada"&&onConfirmPickup&&<button title="Enviar confirmação de retirada pelo WhatsApp" onClick={()=>onConfirmPickup(o,o.pickupMethod||"código de barras")}><Send/></button>}{o.status==="Pendente"&&<button className="ok" title="Dar baixa manual" onClick={()=>onDeliver(o.id)}><CheckCircle2/></button>}<button className="danger" title="Excluir" onClick={()=>onDelete(o.id)}><Trash2/></button></div></div>
+}
+function Modal({title,children,onClose}){return <div className="overlay"><div className="modal"><div className="modalhead"><h3>{title}</h3><button onClick={onClose}>×</button></div>{children}</div></div>}
+function AddOrder({data,onClose,onSave}){
+ const [f,setF]=useState({residentId:data.residents[0]?.id||"",courier:"",tracking:"",description:"",observations:"",notificationChoice:"later",messageTemplate:"Olá, {morador}! Sua encomenda {codigo} está disponível para retirada na portaria. Apresente o QR Code da encomenda ou informe o código {rastreio} ao atendente. Obrigado!"}); const [readBarcode,setReadBarcode]=useState(false); const [photo,setPhoto]=useState(""); const [photoError,setPhotoError]=useState(""); const r=data.residents.find(x=>x.id===f.residentId);
+ async function handlePhoto(file){setPhotoError("");if(!file)return;try{const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)});const img=await new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=dataUrl});const max=1280;const scale=Math.min(1,max/Math.max(img.width,img.height));const canvas=document.createElement("canvas");canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);setPhoto(canvas.toDataURL("image/jpeg",0.72));}catch{setPhotoError("Não foi possível carregar a foto. Tente novamente.")}}
+ return <Modal title="Nova encomenda" onClose={onClose}><div className="form"><label>Morador<select value={f.residentId} onChange={e=>setF({...f,residentId:e.target.value})}>{data.residents.map(r=><option value={r.id} key={r.id}>{r.name} — {r.block}/{r.apt}</option>)}</select></label><label>Entregador / transportadora<input value={f.courier} onChange={e=>setF({...f,courier:e.target.value})} placeholder="Nome ou empresa"/></label><label>Código de barras / rastreio<div className="scan-field"><input value={f.tracking} onChange={e=>setF({...f,tracking:e.target.value})} placeholder="Use Ler para escanear ou digite"/><button type="button" onClick={()=>setReadBarcode(true)}><ScanLine/> Escanear</button></div><small className="hint">Ao tocar em Escanear, a câmera deve ler o código da etiqueta e preencher este campo automaticamente.</small></label><label>Descrição<input value={f.description} onChange={e=>setF({...f,description:e.target.value})} placeholder="Caixa, envelope, mercado..."/></label><label>Foto da encomenda<input type="file" accept="image/*" capture="environment" onChange={e=>handlePhoto(e.target.files?.[0])}/></label>{photo&&<div style={{margin:"8px 0"}}><img src={photo} alt="Prévia da encomenda" style={{width:"100%",maxHeight:240,objectFit:"contain",borderRadius:10}}/><button type="button" onClick={()=>{setPhoto("");setPhotoError("")}}>Remover foto</button></div>}{photoError&&<p className="hint">{photoError}</p>}<label>Observações<textarea value={f.observations} onChange={e=>setF({...f,observations:e.target.value})}/></label><label>Mensagem para o morador<textarea value={f.messageTemplate} onChange={e=>setF({...f,messageTemplate:e.target.value})} rows={5} placeholder="Escreva o aviso que será enviado pelo WhatsApp"/></label><p className="hint">Você pode usar {`{morador}`} para o nome, {`{codigo}`} para o código The Door e {`{rastreio}`} para o código da etiqueta. Esses campos serão preenchidos automaticamente.</p><label>Quando deseja avisar o morador?<select value={f.notificationChoice} onChange={e=>setF({...f,notificationChoice:e.target.value})}><option value="later">Enviar depois — guardar na Central de Notificações</option><option value="now">Enviar agora — abrir WhatsApp após salvar</option></select></label><p className="hint">O WhatsApp abrirá com a mensagem preenchida. Você precisará tocar em Enviar e depois confirmar no The Door.</p><button className="primary wide" onClick={()=>{if(!f.residentId){alert("Cadastre um morador antes de registrar a encomenda.");return}if(!f.messageTemplate.trim()){alert("Escreva a mensagem para o morador.");return}onSave({...f,customMessage:f.messageTemplate.trim(),photo,residentName:r?.name,address:`${r?.block} / ${r?.apt}`,notificationChoice:f.notificationChoice})}}>Registrar encomenda</button></div>{readBarcode&&<Scanner title="Ler etiqueta da transportadora" orders={[]} onClose={()=>setReadBarcode(false)} onRead={value=>{setF(prev=>({...prev,tracking:value}));setReadBarcode(false)}} receiveMode/>}</Modal>
+}
+function EditNotification({order,resident,initialMessage,onClose,onSave}){
+ const [message,setMessage]=useState(initialMessage||"");
+ return <Modal title="Editar mensagem do aviso" onClose={onClose}><div className="form"><p className="hint">Encomenda {order.code} • {resident?.name||order.residentName||"Morador não vinculado"}. A alteração será guardada no The Door e usada quando abrir o WhatsApp.</p><label>Mensagem para o morador<textarea rows={7} value={message} onChange={e=>setMessage(e.target.value)} placeholder="Escreva a mensagem"/></label><button className="primary wide" onClick={()=>{if(!message.trim()){alert("A mensagem não pode ficar vazia.");return}onSave(message)}}>Salvar mensagem</button></div></Modal>
+}
 
-/* Login Firebase */
-.auth-screen{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 50% 0%,#392a18 0%,#10100f 65%)}
-.auth-card{width:min(440px,100%);padding:30px;background:linear-gradient(145deg,#27231d,#1c1a16);border:1px solid #5a482f;border-radius:22px;box-shadow:0 24px 80px #0006;text-align:center}
-.auth-card>img{width:78px;height:78px;object-fit:contain;margin-bottom:8px}
-.auth-eyebrow{font-size:10px;font-weight:800;letter-spacing:2px;color:var(--gold2)}
-.auth-card h1{font-size:25px;margin:10px 0;color:var(--text)}.auth-subtitle{font-size:13px;color:var(--muted);line-height:1.6;margin:0 0 22px}
-.google-button{width:100%;display:flex;align-items:center;justify-content:center;gap:12px;background:#f7f7f7;color:#262626;border:1px solid #ddd;border-radius:10px;padding:12px;font-weight:700}.google-button:disabled,.auth-form button:disabled{opacity:.65;cursor:wait}.google-g{font-size:20px;font-weight:900;color:#4285f4}
-.auth-separator{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:11px;margin:20px 0}.auth-separator:before,.auth-separator:after{content:"";height:1px;flex:1;background:#494033}
-.auth-form{display:grid;gap:13px;text-align:left}.auth-form label{font-size:12px;color:#e7d8bd;font-weight:700}.auth-form input{width:100%;margin-top:6px;padding:12px;background:#171613;color:var(--text);border:1px solid #514638;border-radius:9px;outline:none}.auth-form input:focus{border-color:var(--gold)}.auth-error{font-size:12px;color:#ffb5a9;background:#49251f;border:1px solid #754137;padding:10px;border-radius:8px;margin:0}
-.auth-switch{margin-top:18px;background:transparent;color:var(--gold2);font-size:12px;padding:8px}.auth-footnote{margin:20px 0 0;padding-top:14px;border-top:1px solid #3c3429;color:#a99d89;font-size:10px;line-height:1.6}.user-email{color:var(--muted);font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.header-actions{display:flex;align-items:center;gap:7px}.header-actions button:last-child{color:#f0c6a4}@media(max-width:700px){.auth-card{padding:24px 19px}.user-email{display:none}.header-actions button{font-size:11px;padding:8px}}
-.notification-intro{margin-bottom:14px}.notification-intro small{line-height:1.5}.notification-card{display:flex;justify-content:space-between;gap:16px;align-items:center}.notification-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.notification-actions button{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid #5a4932;background:#393126;color:#f0dfc2;border-radius:9px;padding:10px 12px;font-weight:700}.notification-actions .primary{background:linear-gradient(135deg,var(--gold2),var(--gold));color:#261b0d;border:0}@media(max-width:700px){.notification-card{display:block}.notification-actions{margin-top:14px;display:grid;grid-template-columns:1fr}.notification-actions button{width:100%}nav button{min-width:0;flex:1;padding:4px 1px;font-size:9px}nav button svg{width:17px;height:17px}}
+function ResidentForm({resident,unit,onClose,onSave}){const [f,setF]=useState(()=>resident?{name:resident.name||"",phone:resident.phone||"",block:resident.block||"",street:resident.street||"",quadra:resident.quadra||"",apt:resident.apt||""}:{name:"",phone:"",block:unit?.block||"",street:unit?.street||"",quadra:unit?.quadra||"",apt:unit?.apt||""});return <Modal title={resident?"Editar morador":"Cadastrar morador na unidade"} onClose={onClose}><div className="form"><p className="hint">{resident?"Altere o nome ou telefone. Se necessário, também é possível corrigir os dados da unidade.":"Preencha os dados do novo morador. Para adicionar alguém a uma unidade existente, use o botão Adicionar na unidade desejada."}</p>{Object.keys(f).map(k=><label key={k}>{({name:"Nome do morador",phone:"Telefone / WhatsApp",block:"Bloco",street:"Rua",quadra:"Quadra",apt:"Apartamento"})[k]}<input value={f[k]} onChange={e=>setF({...f,[k]:e.target.value})} required={k==="name"} placeholder={({name:"Nome completo",phone:"DDD + telefone",block:"Ex.: B",street:"Ex.: Rua 02",quadra:"Ex.: Q1",apt:"Ex.: 204"})[k]}/></label>)}<button className="primary wide" onClick={()=>{if(!f.name.trim()){alert("Informe o nome do morador.");return}onSave({...f,name:f.name.trim(),phone:f.phone.trim()})}}>{resident?"Salvar alterações":"Cadastrar morador"}</button></div></Modal>}
+function CourierForm({onClose,onSave}){const [f,setF]=useState({name:"",company:"",phone:"",doc:"",plate:""});return <Modal title="Cadastrar entregador" onClose={onClose}><div className="form">{Object.keys(f).map(k=><label key={k}>{({name:"Nome",company:"Empresa",phone:"Telefone",doc:"Documento",plate:"Placa"})[k]}<input value={f[k]} onChange={e=>setF({...f,[k]:e.target.value})}/></label>)}<button className="primary wide" onClick={()=>onSave(f)}>Salvar entregador</button></div></Modal>}
+function Scanner({orders,onClose,onRead,title="Ler código de barras ou QR Code",receiveMode=false}){
+ const [msg,setMsg]=useState(receiveMode?"Aponte a câmera para o código de barras da etiqueta.":"Escaneie o código The Door ou o rastreio da etiqueta.");
+ const finished=useRef(false);
+ useEffect(()=>{
+  let active=true;
+  let started=false;
+  const formats=[Html5QrcodeSupportedFormats.QR_CODE,Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.CODE_93,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.UPC_E,Html5QrcodeSupportedFormats.ITF,Html5QrcodeSupportedFormats.CODABAR];
+  const reader=new Html5Qrcode("qr-reader",{formatsToSupport:formats,verbose:false});
+  async function stopCamera(){
+   try{if(started && reader.isScanning) await reader.stop();}catch{}
+   try{reader.clear();}catch{}
+   started=false;
+  }
+  reader.start({facingMode:"environment"},{fps:10,qrbox:(viewWidth,viewHeight)=>({width:Math.min(280,Math.max(180,viewWidth-32)),height:Math.min(160,Math.max(100,Math.floor(viewHeight/3)))}),aspectRatio:1.777},async text=>{
+   if(!active||finished.current)return;
+   finished.current=true;
+   setMsg("Código lido. Finalizando câmera...");
+   await stopCamera();
+   if(!active)return;
+   try{onRead(text)}catch{}
+  },()=>{}).then(()=>{started=true;}).catch(()=>{
+   if(active)setMsg("Não foi possível abrir a câmera. Confira a permissão do navegador e tente novamente.");
+  });
+  return ()=>{
+   active=false;
+   if(reader.isScanning){reader.stop().then(()=>{try{reader.clear()}catch{}}).catch(()=>{});}
+   else {try{reader.clear()}catch{}}
+  };
+ },[]);
+ return <Modal title={title} onClose={onClose}><div id="qr-reader" style={{width:"100%",minHeight:180}}></div><p className="scanmsg">{msg}</p><p className="hint">Compatível com QR Code e formatos comuns de barras. Alguns códigos logísticos podem exigir um leitor físico compatível.</p><button type="button" onClick={onClose}>Fechar leitor</button></Modal>
+}
+function QrModal({order,resident,onClose}){
+ const [src,setSrc]=useState("");const [error,setError]=useState("");
+ useEffect(()=>{let alive=true;QRCode.toDataURL(order.code,{width:320,margin:2,errorCorrectionLevel:"M"}).then(url=>{if(alive)setSrc(url)}).catch(()=>setError("Não foi possível gerar o QR Code."));return()=>{alive=false}},[order.code]);
+ return <Modal title="QR Code da encomenda" onClose={onClose}><div className="qr-card">{src?<img src={src} alt={`QR Code ${order.code}`}/>:<p>{error||"Gerando QR Code..."}</p>}<strong>{order.code}</strong><p>{resident?.name||order.residentName||"Morador"}</p><p>{resident?`${resident.block} • Apto ${resident.apt}`:order.address}</p>{order.tracking&&<small>Rastreio: {order.tracking}</small>}<button className="primary wide" onClick={async()=>{if(!src)return;try{const blob=await (await fetch(src)).blob();const file=new File([blob],`The-Door-${order.code}.png`,{type:"image/png"});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:`QR Code ${order.code}`,text:`QR Code da encomenda ${order.code}`});return}}catch(e){}const w=window.open("","_blank");if(w){w.document.write(`<title>QR ${order.code}</title><div style="font-family:Arial;text-align:center;padding:24px"><h2>The Door - ${order.code}</h2><img src="${src}" style="width:280px;height:280px"/><p>${resident?.name||order.residentName||"Morador"}</p><p>${resident?`${resident.block} • Apto ${resident.apt}`:order.address||""}</p></div>`);w.document.close();w.focus();setTimeout(()=>w.print(),300)}}}>Imprimir QR Code</button><button type="button" className="wide" onClick={async()=>{if(!src)return;const msg=`Olá, ${resident?.name||order.residentName||"morador"}! Segue o QR Code da sua encomenda ${order.code}. Apresente este código na portaria para retirada.`;try{const blob=await (await fetch(src)).blob();const file=new File([blob],`The-Door-${order.code}.png`,{type:"image/png"});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:`QR Code ${order.code}`,text:msg});return}}catch(e){}const a=document.createElement("a");a.href=src;a.download=`The-Door-${order.code}.png`;a.click();const url=whatsappUrl(resident?.phone,msg);if(url)window.open(url,"_blank");else window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank")}}><Send/> Compartilhar QR Code</button><button type="button" className="wide" onClick={()=>{const msg=`Olá, ${resident?.name||order.residentName||"morador"}! Sua encomenda ${order.code} está disponível para retirada na portaria. Apresente o QR Code da encomenda no atendimento.`;const url=whatsappUrl(resident?.phone,msg);if(url){if(!openWhatsAppChat(resident?.phone,msg))window.open(url,"_blank")}else window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank")}}><Send/> Enviar aviso pelo WhatsApp</button></div></Modal>
+}
+function App(){
+ const [user,setUser]=useState(null); const [checking,setChecking]=useState(true);
+ useEffect(()=>onAuthStateChanged(auth,u=>{setUser(u);setChecking(false)}),[]);
+ if(checking) return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="The Door"/><h1>The Door</h1><p>Verificando sua sessão...</p></div></div>;
+ if(!user) return <LoginScreen/>;
+ return <AppContent user={user} onLogout={()=>signOut(auth)}/>;
+}
+function LoginScreen(){
+ const [mode,setMode]=useState("login"); const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [busy,setBusy]=useState(false); const [error,setError]=useState("");
+ async function run(action){setBusy(true);setError("");try{await action()}catch(e){const map={"auth/invalid-credential":"E-mail ou senha incorretos.","auth/user-not-found":"Conta não encontrada.","auth/wrong-password":"E-mail ou senha incorretos.","auth/email-already-in-use":"Este e-mail já possui cadastro.","auth/weak-password":"A senha deve ter pelo menos 6 caracteres.","auth/popup-closed-by-user":"A janela de login foi fechada.","auth/unauthorized-domain":"Este domínio não está autorizado no Firebase.","auth/operation-not-allowed":"Ative este método de login no Firebase Authentication."};setError(map[e.code]||`Não foi possível entrar. (${e.code||"erro"})`)}finally{setBusy(false)}}
+ return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="Logo The Door"/><div className="auth-eyebrow">LOGÍSTICA DE ENCOMENDAS</div><h1>Bem-vindo ao The Door</h1><p className="auth-subtitle">Entre para acessar a gestão de encomendas do seu condomínio.</p><button className="google-button" disabled={busy} onClick={()=>run(()=>signInWithPopup(auth,new GoogleAuthProvider()))}><span className="google-g">G</span> Continuar com Google</button><div className="auth-separator"><span>ou use seu e-mail</span></div><form className="auth-form" onSubmit={e=>{e.preventDefault();run(()=>mode==="register"?createUserWithEmailAndPassword(auth,email,password):signInWithEmailAndPassword(auth,email,password))}}><label>E-mail<input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="voce@exemplo.com"/></label><label>Senha<input type="password" autoComplete={mode==="register"?"new-password":"current-password"} value={password} onChange={e=>setPassword(e.target.value)} required minLength={6} placeholder="Mínimo de 6 caracteres"/></label>{error&&<p className="auth-error" role="alert">{error}</p>}<button className="primary wide" disabled={busy}>{busy?"Aguarde...":mode==="register"?"Criar conta":"Entrar"}</button></form><button className="auth-switch" onClick={()=>{setMode(mode==="register"?"login":"register");setError("")}}>{mode==="register"?"Já tem uma conta? Entrar":"Primeiro acesso? Criar conta com e-mail"}</button><p className="auth-footnote">Os dados desta versão ficam salvos neste navegador e perfil de usuário. A sincronização online entre funcionários e o controle de planos serão etapas posteriores.</p></div></div>
+}
+createRoot(document.getElementById("root")).render(<App/>);
