@@ -1,9 +1,8 @@
-```javascript
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-// Configuração do projeto The Door
+// Configuração do Firebase do The Door
 const firebaseConfig = {
   apiKey: "AIzaSyDdVzae6A7wuR4OR-q7wGdU1Hb4aG7E320",
   authDomain: "the-door-2f6ca.firebaseapp.com",
@@ -17,4 +16,3 @@ const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-```
