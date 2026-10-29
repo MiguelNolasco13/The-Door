@@ -1,0 +1,38 @@
+THE DOOR — PRIMEIRA CONFIGURAÇÃO DO FIRESTORE
+
+IMPORTANTE
+- Esta versão sincroniza moradores, entregadores e dados das encomendas pela nuvem.
+- As fotos das encomendas continuam somente no aparelho em que foram tiradas. Não são enviadas ao Firestore, pois o Firestore não é um serviço de armazenamento de imagens. A sincronização de fotos exigirá uma solução de armazenamento própria.
+- O controle comercial de condomínios, mensalidades e acesso temporário de suporte ainda não está implementado nesta etapa.
+- Não apague nem altere arquivos fora dos indicados.
+
+1. Atualize o projeto no GitHub com os arquivos deste pacote.
+2. No Firebase Console, abra o projeto the-door-2f6ca e entre em Firestore Database > Regras.
+3. Substitua as regras pelas contidas no arquivo firestore.rules e clique em Publicar.
+4. Abra Authentication > Users. Entre no The Door usando sua conta Google ou e-mail.
+5. Em Authentication > Users, copie o UID exato da sua conta.
+6. Volte para Firestore Database > Dados e crie uma coleção chamada usuarios.
+7. Como ID do documento, use o UID copiado (não use seu e-mail como ID).
+8. Crie os campos abaixo no documento usuarios/SEU_UID:
+   condominioId (string): condominio-inicial
+   status (string): active
+   role (string): owner
+   email (string): seu e-mail de login
+9. Salve e abra novamente o aplicativo. Ele deverá conectar e criar o documento de dados do condomínio automaticamente.
+
+SEGURANÇA
+- Não deixe as regras abertas para leitura/escrita pública.
+- Os perfis em usuarios são gerenciados pelo administrador no Console nesta etapa; o aplicativo não permite que o usuário escolha seu próprio condomínio.
+- Para adicionar outro usuário ao mesmo condomínio, crie usuarios/UID_DO_USUARIO com condominioId = condominio-inicial e status = active.
+- Para bloquear o acesso, altere status para inactive.
+- Para criar outro condomínio, atribua um condominioId diferente ao perfil; os dados ficam separados por ID.
+
+TESTE
+1. Faça login e cadastre um morador e uma encomenda.
+2. Abra o The Door em outro aparelho ou navegador com um usuário autorizado para o mesmo condominioId.
+3. Confira se os dados aparecem nos dois aparelhos.
+4. Teste com um usuário de outro condominioId: ele não deve conseguir ler os dados do primeiro condomínio.
+
+OBSERVAÇÕES
+- Apenas dados de teste anteriores não são migrados automaticamente para a nuvem; esta versão começa com uma base vazia por condomínio.
+- Não é necessário ativar faturamento para realizar este teste inicial. Mantenha o plano Spark e observe os limites de uso do Firebase.

@@ -1,21 +1,19 @@
 import React,{useEffect,useMemo,useRef,useState} from "react";
 import {createRoot} from "react-dom/client";
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
-import { auth } from "./firebase.js";
+import { doc, getDoc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "./firebase.js";
 import QRCode from "qrcode";
 import {Html5Qrcode,Html5QrcodeSupportedFormats} from "html5-qrcode";
 import {PackagePlus,ScanLine,Users,History,Truck,MapPin,Trash2,Send,Search,Home,LogOut,Plus,CheckCircle2,Clock,ChevronRight,Pencil,UserPlus,MessageSquare} from "lucide-react";
 import "./styles.css";
 import brandIcon from "./the-door-icon.png";
 
-const KEY_PREFIX="the-door-v1-user-";
-const initial={
- residents:[
-  {id:"m1",name:"João da Silva",phone:"21999990001",block:"B",street:"Rua 02",quadra:"Q1",apt:"204"},
-  {id:"m2",name:"Maria Oliveira",phone:"21988880002",block:"A",street:"Rua 01",quadra:"Q1",apt:"101"}
- ],
- couriers:[], orders:[]
-};
+const initial={residents:[],couriers:[],orders:[]};
+// Fotos ficam locais nesta primeira etapa: Firestore não é armazenamento de imagens e cada documento tem limite de 1 MiB.
+function stripPhotos(value){return {residents:value.residents||[],couriers:value.couriers||[],orders:(value.orders||[]).map(({photo,...order})=>order)};}
+function mergeLocalPhotos(cloud,current){const photos=new Map((current.orders||[]).filter(o=>o.photo).map(o=>[o.id,o.photo]));return {...cloud,orders:(cloud.orders||[]).map(o=>photos.has(o.id)?{...o,photo:photos.get(o.id)}:o)};}
+
 function load(userId){
  try{
   const own=localStorage.getItem(KEY_PREFIX+userId);
@@ -48,10 +46,51 @@ function openWhatsAppChat(phone,message){
  return true;
 }
 function AppContent({user,onLogout}){
- const [data,setData]=useState(()=>load(user.uid)); const [tab,setTab]=useState("home"); const [query,setQuery]=useState("");
+ const [data,setData]=useState(initial); const [tab,setTab]=useState("home"); const [query,setQuery]=useState("");
  const [showAdd,setShowAdd]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null);
  const [notice,setNotice]=useState(""); const [editingNotification,setEditingNotification]=useState(null);
- useEffect(()=>localStorage.setItem(KEY_PREFIX+user.uid,JSON.stringify(data)),[data,user.uid]);
+ const [tenantId,setTenantId]=useState(""); const [cloudReady,setCloudReady]=useState(false); const [cloudError,setCloudError]=useState("");
+ const lastCloudJson=useRef(""); const applyingCloud=useRef(false);
+ // O perfil do usuário é provisionado pelo administrador no Firestore; o cliente não pode definir seu próprio condomínio.
+ useEffect(()=>{
+  let stopData=null; let active=true;
+  async function connect(){
+   try{
+    const profileSnap=await getDoc(doc(db,"usuarios",user.uid));
+    if(!active)return;
+    if(!profileSnap.exists()) {setCloudError("Seu usuário ainda não foi vinculado a um condomínio. Peça ao administrador do The Door para concluir seu cadastro.");return;}
+    const profile=profileSnap.data();
+    if(profile.status!=="active"||!profile.condominioId){setCloudError("Seu acesso está inativo ou ainda não foi vinculado a um condomínio. Entre em contato com o administrador.");return;}
+    const cid=String(profile.condominioId); setTenantId(cid);
+    const dataRef=doc(db,"condominios",cid,"dados","app");
+    stopData=onSnapshot(dataRef,async snap=>{
+     if(!active)return;
+     if(!snap.exists()){
+      try{await setDoc(dataRef,{residents:[],couriers:[],orders:[],updatedAt:serverTimestamp()},{merge:false});}catch(e){if(active)setCloudError("Não foi possível inicializar os dados do condomínio. Confira as regras do Firestore.");}
+      return;
+     }
+     const cloud=snap.data(); const clean={residents:Array.isArray(cloud.residents)?cloud.residents:[],couriers:Array.isArray(cloud.couriers)?cloud.couriers:[],orders:Array.isArray(cloud.orders)?cloud.orders:[]};
+     lastCloudJson.current=JSON.stringify(stripPhotos(clean));
+     applyingCloud.current=true;
+     setData(current=>mergeLocalPhotos(clean,current));
+     setCloudError(""); setCloudReady(true);
+     Promise.resolve().then(()=>{applyingCloud.current=false;});
+    },e=>{if(active)setCloudError("Falha ao sincronizar com o Firestore. Confira as regras e o vínculo do usuário.");});
+   }catch(e){if(active)setCloudError(e.code==="permission-denied"?"Acesso negado pelo Firestore. Confira o cadastro do usuário e as regras de segurança.":"Não foi possível conectar ao Firestore. Verifique a conexão e as configurações do Firebase.");}
+  }
+  connect(); return ()=>{active=false;if(stopData)stopData();};
+ },[user.uid]);
+ useEffect(()=>{
+  if(!cloudReady||!tenantId||applyingCloud.current)return;
+  const cloudData=stripPhotos(data); const json=JSON.stringify(cloudData);
+  if(json===lastCloudJson.current)return;
+  const timer=setTimeout(async()=>{
+   try{await setDoc(doc(db,"condominios",tenantId,"dados","app"),{...cloudData,updatedAt:serverTimestamp()});lastCloudJson.current=json;setCloudError("");}
+   catch(e){setCloudError("Não foi possível salvar na nuvem. Verifique a conexão e as regras do Firestore.");}
+  },500);
+  return ()=>clearTimeout(timer);
+ },[data,cloudReady,tenantId]);
+
  const orders=data.orders;
  const pending=orders.filter(o=>o.status==="Pendente");
  const notificationQueue=orders.filter(o=>o.status==="Pendente"&&o.notificationStatus!=="sent");
@@ -124,6 +163,8 @@ function AppContent({user,onLogout}){
  function openWhatsApp(phone,msg){if(!whatsappUrl(phone,msg)){notify("Confira o telefone do morador com DDD e código do país antes de enviar pelo WhatsApp.");return}if(!openWhatsAppChat(phone,msg))notify("O navegador bloqueou a nova janela. Permita pop-ups para o The Door e tente novamente.")}
   function sendWhatsApp(o){const r=data.residents.find(x=>x.id===o.residentId);if(!r){notify("Cadastre ou vincule um morador para enviar a mensagem.");return}const msg=`Olá, ${r.name}! Sua encomenda ${o.code} está disponível para retirada na portaria. Apresente o QR Code desta encomenda ou informe o código ${o.tracking||o.code} ao atendente. Obrigado!`;openWhatsApp(r.phone,msg)}
   function sendPickupConfirmation(o,method){const r=data.residents.find(x=>x.id===o.residentId);if(!r){notify("Retirada registrada, mas não foi possível enviar a mensagem: morador sem telefone vinculado.");return}const msg=`Olá, ${r.name}! Confirmamos que sua encomenda ${o.code} foi retirada na portaria por ${method==="QR Code"?"meio do QR Code":"meio do código de barras"}. Obrigado!`;openWhatsApp(r.phone,msg)}
+ if(cloudError&&!cloudReady)return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="Logo The Door"/><h1>The Door</h1><p>{cloudError}</p><button className="primary wide" onClick={()=>signOut(auth)}>Sair</button></div></div>;
+ if(!cloudReady)return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="Logo The Door"/><h1>The Door</h1><p>Conectando ao condomínio e sincronizando os dados...</p></div></div>;
  return <div className="app">
   <header><div className="brand"><img className="brand-logo" src={brandIcon} alt="Logo The Door"/><div><b>THE DOOR</b><small>Logística de encomendas para condomínios</small></div></div><div className="header-actions"><span className="user-email">{user.email||user.displayName||"Usuário"}</span><button onClick={()=>setScan(true)}><ScanLine/> Ler código</button><button onClick={onLogout}><LogOut/> Sair</button></div></header>
   <main>
@@ -217,6 +258,6 @@ function App(){
 function LoginScreen(){
  const [mode,setMode]=useState("login"); const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [busy,setBusy]=useState(false); const [error,setError]=useState("");
  async function run(action){setBusy(true);setError("");try{await action()}catch(e){const map={"auth/invalid-credential":"E-mail ou senha incorretos.","auth/user-not-found":"Conta não encontrada.","auth/wrong-password":"E-mail ou senha incorretos.","auth/email-already-in-use":"Este e-mail já possui cadastro.","auth/weak-password":"A senha deve ter pelo menos 6 caracteres.","auth/popup-closed-by-user":"A janela de login foi fechada.","auth/unauthorized-domain":"Este domínio não está autorizado no Firebase.","auth/operation-not-allowed":"Ative este método de login no Firebase Authentication."};setError(map[e.code]||`Não foi possível entrar. (${e.code||"erro"})`)}finally{setBusy(false)}}
- return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="Logo The Door"/><div className="auth-eyebrow">LOGÍSTICA DE ENCOMENDAS</div><h1>Bem-vindo ao The Door</h1><p className="auth-subtitle">Entre para acessar a gestão de encomendas do seu condomínio.</p><button className="google-button" disabled={busy} onClick={()=>run(()=>signInWithPopup(auth,new GoogleAuthProvider()))}><span className="google-g">G</span> Continuar com Google</button><div className="auth-separator"><span>ou use seu e-mail</span></div><form className="auth-form" onSubmit={e=>{e.preventDefault();run(()=>mode==="register"?createUserWithEmailAndPassword(auth,email,password):signInWithEmailAndPassword(auth,email,password))}}><label>E-mail<input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="voce@exemplo.com"/></label><label>Senha<input type="password" autoComplete={mode==="register"?"new-password":"current-password"} value={password} onChange={e=>setPassword(e.target.value)} required minLength={6} placeholder="Mínimo de 6 caracteres"/></label>{error&&<p className="auth-error" role="alert">{error}</p>}<button className="primary wide" disabled={busy}>{busy?"Aguarde...":mode==="register"?"Criar conta":"Entrar"}</button></form><button className="auth-switch" onClick={()=>{setMode(mode==="register"?"login":"register");setError("")}}>{mode==="register"?"Já tem uma conta? Entrar":"Primeiro acesso? Criar conta com e-mail"}</button><p className="auth-footnote">Os dados desta versão ficam salvos neste navegador e perfil de usuário. A sincronização online entre funcionários e o controle de planos serão etapas posteriores.</p></div></div>
+ return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="Logo The Door"/><div className="auth-eyebrow">LOGÍSTICA DE ENCOMENDAS</div><h1>Bem-vindo ao The Door</h1><p className="auth-subtitle">Entre para acessar a gestão de encomendas do seu condomínio.</p><button className="google-button" disabled={busy} onClick={()=>run(()=>signInWithPopup(auth,new GoogleAuthProvider()))}><span className="google-g">G</span> Continuar com Google</button><div className="auth-separator"><span>ou use seu e-mail</span></div><form className="auth-form" onSubmit={e=>{e.preventDefault();run(()=>mode==="register"?createUserWithEmailAndPassword(auth,email,password):signInWithEmailAndPassword(auth,email,password))}}><label>E-mail<input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="voce@exemplo.com"/></label><label>Senha<input type="password" autoComplete={mode==="register"?"new-password":"current-password"} value={password} onChange={e=>setPassword(e.target.value)} required minLength={6} placeholder="Mínimo de 6 caracteres"/></label>{error&&<p className="auth-error" role="alert">{error}</p>}<button className="primary wide" disabled={busy}>{busy?"Aguarde...":mode==="register"?"Criar conta":"Entrar"}</button></form><button className="auth-switch" onClick={()=>{setMode(mode==="register"?"login":"register");setError("")}}>{mode==="register"?"Já tem uma conta? Entrar":"Primeiro acesso? Criar conta com e-mail"}</button><p className="auth-footnote">Os dados do condomínio são sincronizados pela nuvem. O acesso precisa ser liberado pelo administrador do The Door.</p></div></div>
 }
 createRoot(document.getElementById("root")).render(<App/>);

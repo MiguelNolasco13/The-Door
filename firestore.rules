@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function hasActiveMembership(condominioId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.condominioId == condominioId
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.status == "active";
+    }
+
+    // Perfil só pode ser lido pelo próprio usuário. Alterações de perfil são feitas pelo administrador no Console.
+    match /usuarios/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create, update, delete: if false;
+    }
+
+    // Dados operacionais isolados por condomínio.
+    match /condominios/{condominioId} {
+      allow read, write: if false;
+      match /dados/{docId} {
+        allow read, write: if hasActiveMembership(condominioId);
+      }
+    }
+  }
+}
