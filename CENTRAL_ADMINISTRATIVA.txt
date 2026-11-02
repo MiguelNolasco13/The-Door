@@ -1,0 +1,30 @@
+CENTRAL ADMINISTRATIVA — THE DOOR
+
+1. O painel administrativo aparece somente para um usuário cujo documento
+   usuarios/{UID} tenha role = "owner" e status = "active".
+2. No Firebase Console, mantenha o documento do proprietário já existente
+   em usuarios/{UID}; não crie outro usuário. Confirme os campos role e status.
+3. Substitua as regras do Firestore pelo conteúdo do arquivo firestore.rules
+   e publique as regras.
+4. Faça o build e publique o projeto atualizado no GitHub Pages.
+
+CADASTRO E LICENÇA
+- Os condomínios são gravados na coleção condominios.
+- O cadastro permite valor negociado, periodicidade, início, vencimento,
+  período de teste e status individual.
+- Suspender altera o status do condomínio e da licença, sem apagar os dados.
+- A aplicação operacional consulta o cadastro da licença e bloqueia o acesso
+  do condomínio se estiver suspenso, inativo ou vencido.
+- O histórico de alterações administrativas é gravado em admin_logs.
+
+LIMITAÇÕES DESTA PRIMEIRA ENTREGA
+- O painel lista os perfis da coleção usuarios, mas não cria contas no Firebase
+  Authentication. Criar usuários de forma segura exige convite/provisionamento
+  no servidor ou no Console do Firebase.
+- Pagamentos são apenas valores/condições cadastrados; não há baixa de Pix,
+  cartão ou conciliação financeira automática.
+- Os lembretes de vencimento ainda não são enviados automaticamente.
+- A duração do teste é registrada, mas o vencimento deve ser informado no campo
+  de vencimento; esta versão não calcula a data automaticamente.
+- A receita mensal exibida soma os valores dos condomínios ativos, sem converter
+  periodicidades trimestral/semestral/anual para equivalente mensal.

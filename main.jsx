@@ -1,11 +1,11 @@
 import React,{useEffect,useMemo,useRef,useState} from "react";
 import {createRoot} from "react-dom/client";
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
-import { doc, getDoc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, setDoc, serverTimestamp, collection, getDocs, addDoc, updateDoc, deleteDoc, query, orderBy, limit } from "firebase/firestore";
 import { auth, db } from "./firebase.js";
 import QRCode from "qrcode";
 import {Html5Qrcode,Html5QrcodeSupportedFormats} from "html5-qrcode";
-import {PackagePlus,ScanLine,Users,History,Truck,MapPin,Trash2,Send,Search,Home,LogOut,Plus,CheckCircle2,Clock,ChevronRight,Pencil,UserPlus,MessageSquare} from "lucide-react";
+import {PackagePlus,ScanLine,Users,History,Truck,MapPin,Trash2,Send,Search,Home,LogOut,Plus,CheckCircle2,Clock,ChevronRight,Pencil,UserPlus,MessageSquare,Building2,ShieldCheck,Wallet,CalendarDays,RefreshCw} from "lucide-react";
 import "./styles.css";
 import brandIcon from "./the-door-icon.png";
 
@@ -62,6 +62,15 @@ function AppContent({user,onLogout}){
     const profile=profileSnap.data();
     if(profile.status!=="active"||!profile.condominioId){setCloudError("Seu acesso está inativo ou ainda não foi vinculado a um condomínio. Entre em contato com o administrador.");return;}
     const cid=String(profile.condominioId); setTenantId(cid);
+    const condoSnap=await getDoc(doc(db,"condominios",cid));
+    if(!active)return;
+    if(condoSnap.exists()){
+     const condo=condoSnap.data(), license=condo.licenca||{};
+     const today=new Date().toISOString().slice(0,10);
+     if(["suspenso","inativo"].includes(String(condo.status||"").toLowerCase()) || ["suspensa","suspenso","expirada","cancelada"].includes(String(license.status||"").toLowerCase()) || (license.vencimento&&license.vencimento<today)){
+      setCloudError("A licença deste condomínio está suspensa ou vencida. Entre em contato com o administrador do The Door para regularizar o acesso.");return;
+     }
+    }
     const dataRef=doc(db,"condominios",cid,"dados","app");
     stopData=onSnapshot(dataRef,async snap=>{
      if(!active)return;
@@ -248,11 +257,107 @@ function QrModal({order,resident,onClose}){
  useEffect(()=>{let alive=true;QRCode.toDataURL(order.code,{width:320,margin:2,errorCorrectionLevel:"M"}).then(url=>{if(alive)setSrc(url)}).catch(()=>setError("Não foi possível gerar o QR Code."));return()=>{alive=false}},[order.code]);
  return <Modal title="QR Code da encomenda" onClose={onClose}><div className="qr-card">{src?<img src={src} alt={`QR Code ${order.code}`}/>:<p>{error||"Gerando QR Code..."}</p>}<strong>{order.code}</strong><p>{resident?.name||order.residentName||"Morador"}</p><p>{resident?`${resident.block} • Apto ${resident.apt}`:order.address}</p>{order.tracking&&<small>Rastreio: {order.tracking}</small>}<button className="primary wide" onClick={async()=>{if(!src)return;try{const blob=await (await fetch(src)).blob();const file=new File([blob],`The-Door-${order.code}.png`,{type:"image/png"});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:`QR Code ${order.code}`,text:`QR Code da encomenda ${order.code}`});return}}catch(e){}const w=window.open("","_blank");if(w){w.document.write(`<title>QR ${order.code}</title><div style="font-family:Arial;text-align:center;padding:24px"><h2>The Door - ${order.code}</h2><img src="${src}" style="width:280px;height:280px"/><p>${resident?.name||order.residentName||"Morador"}</p><p>${resident?`${resident.block} • Apto ${resident.apt}`:order.address||""}</p></div>`);w.document.close();w.focus();setTimeout(()=>w.print(),300)}}}>Imprimir QR Code</button><button type="button" className="wide" onClick={async()=>{if(!src)return;const msg=`Olá, ${resident?.name||order.residentName||"morador"}! Segue o QR Code da sua encomenda ${order.code}. Apresente este código na portaria para retirada.`;try{const blob=await (await fetch(src)).blob();const file=new File([blob],`The-Door-${order.code}.png`,{type:"image/png"});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:`QR Code ${order.code}`,text:msg});return}}catch(e){}const a=document.createElement("a");a.href=src;a.download=`The-Door-${order.code}.png`;a.click();const url=whatsappUrl(resident?.phone,msg);if(url)window.open(url,"_blank");else window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank")}}><Send/> Compartilhar QR Code</button><button type="button" className="wide" onClick={()=>{const msg=`Olá, ${resident?.name||order.residentName||"morador"}! Sua encomenda ${order.code} está disponível para retirada na portaria. Apresente o QR Code da encomenda no atendimento.`;const url=whatsappUrl(resident?.phone,msg);if(url){if(!openWhatsAppChat(resident?.phone,msg))window.open(url,"_blank")}else window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank")}}><Send/> Enviar aviso pelo WhatsApp</button></div></Modal>
 }
+
+function OwnerAdmin({user,onLogout}){
+ const [condos,setCondos]=useState([]),[logs,setLogs]=useState([]),[users,setUsers]=useState([]);
+ const [loading,setLoading]=useState(true),[error,setError]=useState(""),[editing,setEditing]=useState(null),[filter,setFilter]=useState("");
+ const blank={nome:"",responsavel:"",email:"",telefone:"",endereco:"",status:"ativo",valor:"",periodo:"mensal",inicio:new Date().toISOString().slice(0,10),vencimento:"",teste:false,diasTeste:"",observacoes:""};
+ const [form,setForm]=useState(blank);
+ async function load(){
+  setLoading(true);setError("");
+  try{
+   const [c,u,l]=await Promise.all([
+    getDocs(collection(db,"condominios")),
+    getDocs(collection(db,"usuarios")),
+    getDocs(query(collection(db,"admin_logs"),orderBy("createdAt","desc"),limit(20)))
+   ]);
+   setCondos(c.docs.map(x=>({id:x.id,...x.data()})));
+   setUsers(u.docs.map(x=>({id:x.id,...x.data()})));
+   setLogs(l.docs.map(x=>({id:x.id,...x.data()})));
+  }catch(e){setError("Não foi possível carregar a central. Confira as regras do Firestore. ("+(e.code||"erro")+")");}
+  finally{setLoading(false)}
+ }
+ useEffect(()=>{load()},[]);
+ async function audit(acao,condominioId,detalhe){
+  await addDoc(collection(db,"admin_logs"),{acao,condominioId:condominioId||"",detalhe,autor:user.email||user.uid,autorUid:user.uid,createdAt:serverTimestamp()});
+ }
+ function openNew(){setEditing("new");setForm(blank)}
+ function openEdit(c){setEditing(c.id);setForm({...blank,nome:c.nome||"",responsavel:c.responsavel||"",email:c.email||"",telefone:c.telefone||"",endereco:c.endereco||"",status:c.status||"ativo",valor:c.licenca?.valor??"",periodo:c.licenca?.periodo||"mensal",inicio:c.licenca?.inicio||"",vencimento:c.licenca?.vencimento||"",teste:!!c.licenca?.teste,diasTeste:c.licenca?.diasTeste||"",observacoes:c.observacoes||""})}
+ async function save(e){
+  e.preventDefault();
+  if(!form.nome.trim()){setError("Informe o nome do condomínio.");return}
+  const payload={nome:form.nome.trim(),responsavel:form.responsavel.trim(),email:form.email.trim(),telefone:form.telefone.trim(),endereco:form.endereco.trim(),status:form.status,observacoes:form.observacoes.trim(),licenca:{valor:Number(form.valor||0),periodo:form.periodo,inicio:form.inicio||"",vencimento:form.vencimento||"",teste:form.teste,diasTeste:Number(form.diasTeste||0),status:form.status==="suspenso"?"suspensa":(form.teste?"em_teste":(form.vencimento&&form.vencimento<new Date().toISOString().slice(0,10)?"expirada":"ativa"))},updatedAt:serverTimestamp()};
+  try{
+   if(editing==="new"){const ref=await addDoc(collection(db,"condominios"),{...payload,criadoPor:user.uid,createdAt:serverTimestamp()});await audit("condominio_criado",ref.id,`Cadastro de ${payload.nome}`)}
+   else {await updateDoc(doc(db,"condominios",editing),payload);await audit("condominio_atualizado",editing,`Atualização de ${payload.nome}`)}
+   setEditing(null);await load();
+  }catch(e){setError("Falha ao salvar. Verifique as regras do Firestore. ("+(e.code||"erro")+")")}
+ }
+ async function changeStatus(c,status){
+  try{const licenseStatus=status==="suspenso"?"suspensa":(c.licenca?.vencimento&&c.licenca.vencimento<today?"expirada":(c.licenca?.teste?"em_teste":"ativa"));
+  await updateDoc(doc(db,"condominios",c.id),{status, "licenca.status":licenseStatus,updatedAt:serverTimestamp()});await audit(status==="suspenso"?"licenca_suspensa":"licenca_reativada",c.id,`${c.nome}: ${status}`);await load()}
+  catch(e){setError("Não foi possível alterar o status. ("+(e.code||"erro")+")")}
+ }
+ const today=new Date().toISOString().slice(0,10);
+ const active=condos.filter(c=>c.status==="ativo"&&(!c.licenca?.vencimento||c.licenca.vencimento>=today)).length;
+ const expired=condos.filter(c=>c.licenca?.vencimento&&c.licenca.vencimento<today).length;
+ const due=condos.filter(c=>c.licenca?.vencimento&&c.licenca.vencimento>=today&&c.licenca.vencimento<=new Date(Date.now()+30*86400000).toISOString().slice(0,10)).length;
+ const shown=condos.filter(c=>`${c.nome||""} ${c.responsavel||""} ${c.email||""}`.toLowerCase().includes(filter.toLowerCase()));
+ return <div className="app admin-app">
+  <header><div className="brand"><div className="logo"><ShieldCheck/></div><div><b>THE DOOR · ADMIN</b><small>Painel do proprietário</small></div></div><div className="header-actions"><span className="user-email">{user.email||"Proprietário"}</span><button onClick={onLogout}><LogOut/> Sair</button></div></header>
+  <main>
+   <div className="hero"><div><span className="eyebrow">CENTRAL DA PLATAFORMA</span><h1>Administração The Door</h1><p>Gerencie condomínios, licenças e cobranças em um só lugar.</p></div><div className="hero-buttons"><button onClick={load}><RefreshCw/> Atualizar</button><button className="primary" onClick={openNew}><Plus/> Novo condomínio</button></div></div>
+   {error&&<p className="admin-error">{error}</p>}
+   <div className="stats">
+    <Stat icon={<Building2/>} label="Condomínios cadastrados" value={condos.length}/>
+    <Stat icon={<ShieldCheck/>} label="Licenças ativas" value={active}/>
+    <Stat icon={<CalendarDays/>} label="Vencem em até 30 dias" value={due}/>
+   </div>
+   <div className="stats admin-stats-secondary">
+    <Stat icon={<Clock/>} label="Licenças vencidas" value={expired}/>
+    <Stat icon={<Users/>} label="Usuários vinculados" value={users.length}/>
+    <Stat icon={<Wallet/>} label="Receita mensal cadastrada" value={"R$ "+condos.filter(c=>c.status==="ativo").reduce((a,c)=>a+Number(c.licenca?.valor||0),0).toLocaleString("pt-BR",{minimumFractionDigits:2})}/>
+   </div>
+   <SectionTitle icon={<Building2/>} title="Condomínios e licenças"/>
+   <div className="toolbar"><div className="search"><Search/><input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Buscar condomínio, responsável ou e-mail..."/></div><button className="primary" onClick={openNew}><Plus/> Cadastrar</button></div>
+   {loading?<div className="empty">Carregando dados administrativos...</div>:shown.length===0?<div className="empty">Nenhum condomínio cadastrado.</div>:<div className="cards">{shown.map(c=><div className="card admin-condo" key={c.id}>
+    <div className="admin-condo-top"><div><b>{c.nome||"Condomínio sem nome"}</b><small>{c.responsavel||"Responsável não informado"} · {c.endereco||"Endereço não informado"}</small></div><span className={"badge "+(c.status==="ativo"?"done":"")}>{c.status||"sem status"}</span></div>
+    <div className="admin-meta"><span>Valor: <b>R$ {Number(c.licenca?.valor||0).toLocaleString("pt-BR",{minimumFractionDigits:2})}</b></span><span>Cobrança: <b>{c.licenca?.periodo||"não definida"}</b></span><span>Vencimento: <b>{c.licenca?.vencimento?new Date(c.licenca.vencimento+"T12:00:00").toLocaleDateString("pt-BR"):"não definido"}</b></span><span>Teste: <b>{c.licenca?.teste?"Sim":"Não"}</b></span></div>
+    <div className="admin-actions"><button onClick={()=>openEdit(c)}><Pencil/> Editar / licença</button>{c.status==="suspenso"?<button className="primary" onClick={()=>changeStatus(c,"ativo")}>Reativar</button>:<button className="danger-action" onClick={()=>changeStatus(c,"suspenso")}>Suspender acesso</button>}</div>
+   </div>)}</div>}
+   <SectionTitle icon={<Users/>} title="Usuários cadastrados"/>
+   <div className="card"><small>O painel lista os perfis existentes no Firestore. A criação de contas de acesso deve ser feita por convite ou provisionamento seguro no Firebase Authentication; não é realizada diretamente pelo navegador do proprietário.</small>
+    {users.slice(0,12).map(u=><div className="admin-user-row" key={u.id}><b>{u.nome||u.email||u.id}</b><small>{u.email||u.id} · {u.role||"usuário"} · {u.status||"sem status"} · Condomínio: {u.condominioId||"—"}</small></div>)}
+   </div>
+   <SectionTitle icon={<History/>} title="Registro de atividades administrativas"/>
+   <div className="card">{logs.length===0?<small>Nenhuma atividade registrada ainda.</small>:logs.map(l=><div className="admin-user-row" key={l.id}><b>{String(l.acao||"Atividade").replaceAll("_"," ")}</b><small>{l.detalhe||""} · {l.autor||""} · {l.createdAt?.toDate?l.createdAt.toDate().toLocaleString("pt-BR"):"agora"}</small></div>)}</div>
+  </main>
+  {editing!==null&&<div className="overlay"><form className="modal admin-form" onSubmit={save}><div className="modalhead"><h3>{editing==="new"?"Cadastrar condomínio":"Editar condomínio e licença"}</h3><button type="button" onClick={()=>setEditing(null)}>×</button></div>
+   <div className="form">
+    <label>Nome do condomínio<input required value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})}/></label>
+    <label>Responsável / síndico<input value={form.responsavel} onChange={e=>setForm({...form,responsavel:e.target.value})}/></label>
+    <label>E-mail de contato<input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></label>
+    <label>Telefone<input value={form.telefone} onChange={e=>setForm({...form,telefone:e.target.value})}/></label>
+    <label>Endereço<input value={form.endereco} onChange={e=>setForm({...form,endereco:e.target.value})}/></label>
+    <div className="admin-form-grid"><label>Valor negociado (R$)<input type="number" min="0" step="0.01" value={form.valor} onChange={e=>setForm({...form,valor:e.target.value})}/></label><label>Periodicidade<select value={form.periodo} onChange={e=>setForm({...form,periodo:e.target.value})}><option value="mensal">Mensal</option><option value="trimestral">Trimestral</option><option value="semestral">Semestral</option><option value="anual">Anual</option><option value="personalizado">Personalizado</option></select></label></div>
+    <div className="admin-form-grid"><label>Início da licença<input type="date" value={form.inicio} onChange={e=>setForm({...form,inicio:e.target.value})}/></label><label>Vencimento<input type="date" value={form.vencimento} onChange={e=>setForm({...form,vencimento:e.target.value})}/></label></div>
+    <label className="admin-check"><input type="checkbox" checked={form.teste} onChange={e=>setForm({...form,teste:e.target.checked})}/> Ativar período de teste</label>
+    {form.teste&&<label>Duração do teste (dias)<input type="number" min="1" value={form.diasTeste} onChange={e=>setForm({...form,diasTeste:e.target.value})}/></label>}
+    <label>Status do condomínio<select value={form.status} onChange={e=>setForm({...form,status:e.target.value})}><option value="ativo">Ativo</option><option value="suspenso">Suspenso</option><option value="inativo">Inativo</option></select></label>
+    <label>Observações<textarea value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})}/></label>
+    <button className="primary wide" type="submit">Salvar condomínio e licença</button>
+   </div>
+  </form></div>}
+ </div>
+}
+
 function App(){
- const [user,setUser]=useState(null); const [checking,setChecking]=useState(true);
- useEffect(()=>onAuthStateChanged(auth,u=>{setUser(u);setChecking(false)}),[]);
- if(checking) return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="The Door"/><h1>The Door</h1><p>Verificando sua sessão...</p></div></div>;
+ const [user,setUser]=useState(null); const [checking,setChecking]=useState(true); const [profile,setProfile]=useState(null); const [profileLoading,setProfileLoading]=useState(false);
+ useEffect(()=>onAuthStateChanged(auth,u=>{setUser(u);setChecking(false);setProfile(null)}),[]);
+ useEffect(()=>{let live=true;if(!user){setProfile(null);return}setProfileLoading(true);getDoc(doc(db,"usuarios",user.uid)).then(s=>{if(live)setProfile(s.exists()?s.data():null)}).catch(()=>{if(live)setProfile(null)}).finally(()=>{if(live)setProfileLoading(false)});return()=>{live=false}},[user?.uid]);
+ if(checking|| (user&&profileLoading)) return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="The Door"/><h1>The Door</h1><p>Verificando sua sessão...</p></div></div>;
  if(!user) return <LoginScreen/>;
+ if(profile?.role==="owner"&&profile?.status==="active")return <OwnerAdmin user={user} onLogout={()=>signOut(auth)}/>;
  return <AppContent user={user} onLogout={()=>signOut(auth)}/>;
 }
 function LoginScreen(){

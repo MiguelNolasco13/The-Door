@@ -1,28 +1,43 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
-      return request.auth != null;
+    function signedIn() { return request.auth != null; }
+    function profileExists() {
+      return signedIn() && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
     }
-    function hasActiveMembership(condominioId) {
-      return signedIn()
-        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
-        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.condominioId == condominioId
+    function activeUser() {
+      return profileExists()
         && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.status == "active";
     }
+    function isOwner() {
+      return activeUser()
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role == "owner";
+    }
+    function hasActiveMembership(condominioId) {
+      return activeUser()
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.condominioId == condominioId;
+    }
 
-    // Perfil só pode ser lido pelo próprio usuário. Alterações de perfil são feitas pelo administrador no Console.
     match /usuarios/{userId} {
-      allow read: if signedIn() && request.auth.uid == userId;
+      allow get: if signedIn() && (request.auth.uid == userId || isOwner());
+      allow list: if isOwner();
+      // Perfis e vínculos são provisionados pelo proprietário no Console do Firebase.
       allow create, update, delete: if false;
     }
 
-    // Dados operacionais isolados por condomínio.
     match /condominios/{condominioId} {
-      allow read, write: if false;
+      allow read: if isOwner() || hasActiveMembership(condominioId);
+      allow create, update, delete: if isOwner();
       match /dados/{docId} {
-        allow read, write: if hasActiveMembership(condominioId);
+        allow read, write: if isOwner() || hasActiveMembership(condominioId);
       }
+    }
+
+    match /admin_logs/{logId} {
+      allow read: if isOwner();
+      allow create: if isOwner()
+        && request.resource.data.autorUid == request.auth.uid;
+      allow update, delete: if false;
     }
   }
 }
