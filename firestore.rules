@@ -21,8 +21,18 @@ service cloud.firestore {
     match /usuarios/{userId} {
       allow get: if signedIn() && (request.auth.uid == userId || isOwner());
       allow list: if isOwner();
-      // Perfis e vínculos são provisionados pelo proprietário no Console do Firebase.
-      allow create, update, delete: if false;
+      // O proprietário administra perfis. Um novo administrador pode criar apenas o próprio perfil
+      // se existir um convite pendente para o mesmo e-mail autenticado.
+      allow create: if isOwner() || (signedIn()
+        && request.auth.uid == userId
+        && exists(/databases/$(database)/documents/convites/$(request.auth.token.email))
+        && get(/databases/$(database)/documents/convites/$(request.auth.token.email)).data.email == request.auth.token.email
+        && get(/databases/$(database)/documents/convites/$(request.auth.token.email)).data.status == "pending"
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.condominioId == get(/databases/$(database)/documents/convites/$(request.auth.token.email)).data.condominioId
+        && request.resource.data.role == "admin"
+        && request.resource.data.status == "active");
+      allow update, delete: if isOwner();
     }
 
     match /condominios/{condominioId} {
@@ -31,6 +41,14 @@ service cloud.firestore {
       match /dados/{docId} {
         allow read, write: if isOwner() || hasActiveMembership(condominioId);
       }
+    }
+
+
+    match /convites/{emailId} {
+      // O proprietário cria/atualiza convites. O convidado autenticado pode apenas ler o convite do próprio e-mail.
+      allow get: if isOwner() || (signedIn() && request.auth.token.email == resource.data.email);
+      allow list: if isOwner();
+      allow create, update, delete: if isOwner();
     }
 
     match /admin_logs/{logId} {
