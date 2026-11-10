@@ -56,7 +56,7 @@ function AppContent({user,onLogout}){
   let stopData=null; let active=true;
   async function connect(){
    try{
-    const profileSnap=await getDoc(doc(db,"usuarios",user.uid));
+    let profileSnap=await getDoc(doc(db,"usuarios",user.uid));
     if(!active)return;
     if(!profileSnap.exists()) {
       const emailKey=String(user.email||"").trim().toLowerCase();
@@ -67,7 +67,6 @@ function AppContent({user,onLogout}){
          const invite=inviteSnap.data();
          if(invite.status==="active" && invite.condominioId && invite.email===user.email){
           await setDoc(doc(db,"usuarios",user.uid),{nome:invite.nome||invite.responsavel||user.displayName||"",email:user.email,role:"admin",status:"active",condominioId:String(invite.condominioId),criadoEm:serverTimestamp(),provisionadoPorConvite:true});
-          await updateDoc(doc(db,"convites",emailKey),{status:"used",usedBy:user.uid,usedAt:serverTimestamp()});
           const fresh=await getDoc(doc(db,"usuarios",user.uid));
           if(!fresh.exists()){setCloudError("Não foi possível concluir o vínculo do usuário.");return;}
           profileSnap=fresh;

@@ -10,7 +10,15 @@ service cloud.firestore {
     match /convites/{emailKey} {
       allow get: if signedIn() && request.auth.token.email == resource.data.email;
       allow list: if false;
-      allow create, update, delete: if isOwner();
+      allow create: if isOwner();
+      allow update: if isOwner() || (signedIn()
+        && request.auth.token.email == resource.data.email
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.condominioId == resource.data.condominioId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "usedBy", "usedAt"]));
+      allow delete: if isOwner();
     }
 
     match /usuarios/{userId} {
