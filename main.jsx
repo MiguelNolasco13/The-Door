@@ -25,7 +25,6 @@ function load(userId){
  }catch{return initial}
 }
 function uid(p="id"){return p+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,7)}
-function normalizeEmail(email){return String(email||"").trim().toLowerCase()}
 // WhatsApp gratuito: abre uma conversa com texto preenchido; o usuário confirma o envio.
 function phoneForWhatsApp(phone){
  let n=String(phone||"").replace(/\D/g,"");
@@ -59,7 +58,24 @@ function AppContent({user,onLogout}){
    try{
     const profileSnap=await getDoc(doc(db,"usuarios",user.uid));
     if(!active)return;
-    if(!profileSnap.exists()) {setCloudError("Seu usuário ainda não foi vinculado a um condomínio. Peça ao administrador do The Door para concluir seu cadastro.");return;}
+    if(!profileSnap.exists()) {
+      const emailKey=String(user.email||"").trim().toLowerCase();
+      if(emailKey){
+       try{
+        const inviteSnap=await getDoc(doc(db,"convites",emailKey));
+        if(inviteSnap.exists()){
+         const invite=inviteSnap.data();
+         if(invite.status==="active" && invite.condominioId && invite.email===user.email){
+          await setDoc(doc(db,"usuarios",user.uid),{nome:invite.nome||invite.responsavel||user.displayName||"",email:user.email,role:"admin",status:"active",condominioId:String(invite.condominioId),criadoEm:serverTimestamp(),provisionadoPorConvite:true});
+          await updateDoc(doc(db,"convites",emailKey),{status:"used",usedBy:user.uid,usedAt:serverTimestamp()});
+          const fresh=await getDoc(doc(db,"usuarios",user.uid));
+          if(!fresh.exists()){setCloudError("Não foi possível concluir o vínculo do usuário.");return;}
+          profileSnap=fresh;
+         } else {setCloudError("Seu convite está inativo ou o e-mail não corresponde ao convite. Peça ao administrador do The Door para revisar o cadastro.");return;}
+        } else {setCloudError("Seu usuário ainda não foi vinculado a um condomínio. Peça ao administrador do The Door para concluir seu cadastro.");return;}
+       }catch(e){setCloudError(e.code==="permission-denied"?"O vínculo deste usuário foi bloqueado pelas regras do Firestore. Publique as regras atualizadas do The Door.":"Não foi possível concluir o vínculo do usuário. Tente novamente.");return;}
+      } else {setCloudError("Não foi possível identificar o e-mail desta conta.");return;}
+    }
     const profile=profileSnap.data();
     if(profile.status!=="active"||!profile.condominioId){setCloudError("Seu acesso está inativo ou ainda não foi vinculado a um condomínio. Entre em contato com o administrador.");return;}
     const cid=String(profile.condominioId); setTenantId(cid);
@@ -173,8 +189,8 @@ function AppContent({user,onLogout}){
  function openWhatsApp(phone,msg){if(!whatsappUrl(phone,msg)){notify("Confira o telefone do morador com DDD e código do país antes de enviar pelo WhatsApp.");return}if(!openWhatsAppChat(phone,msg))notify("O navegador bloqueou a nova janela. Permita pop-ups para o The Door e tente novamente.")}
   function sendWhatsApp(o){const r=data.residents.find(x=>x.id===o.residentId);if(!r){notify("Cadastre ou vincule um morador para enviar a mensagem.");return}const msg=`Olá, ${r.name}! Sua encomenda ${o.code} está disponível para retirada na portaria. Apresente o QR Code desta encomenda ou informe o código ${o.tracking||o.code} ao atendente. Obrigado!`;openWhatsApp(r.phone,msg)}
   function sendPickupConfirmation(o,method){const r=data.residents.find(x=>x.id===o.residentId);if(!r){notify("Retirada registrada, mas não foi possível enviar a mensagem: morador sem telefone vinculado.");return}const msg=`Olá, ${r.name}! Confirmamos que sua encomenda ${o.code} foi retirada na portaria por ${method==="QR Code"?"meio do QR Code":"meio do código de barras"}. Obrigado!`;openWhatsApp(r.phone,msg)}
- if(cloudError&&!cloudReady)return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="Logo The Door"/><h1>The Door</h1><p>{cloudError}</p><button className="primary wide" onClick={()=>signOut(auth)}>Sair</button></div></div>;
- if(!cloudReady)return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="Logo The Door"/><h1>The Door</h1><p>Conectando ao condomínio e sincronizando os dados...</p></div></div>;
+ if(cloudError&&!cloudReady)return <div className="auth-screen"><div className="auth-card"><img src={brandIcon} alt="Logo The Door"/><h1>The Door</h1><p>{cloudError}</p><button className="primary wide" onClick={()=>signOut(auth)}>Sair</button></div></div>;
+ if(!cloudReady)return <div className="auth-screen"><div className="auth-card"><img src={brandIcon} alt="Logo The Door"/><h1>The Door</h1><p>Conectando ao condomínio e sincronizando os dados...</p></div></div>;
  return <div className="app">
   <header><div className="brand"><img className="brand-logo" src={brandIcon} alt="Logo The Door"/><div><b>THE DOOR</b><small>Logística de encomendas para condomínios</small></div></div><div className="header-actions"><span className="user-email">{user.email||user.displayName||"Usuário"}</span><button onClick={()=>setScan(true)}><ScanLine/> Ler código</button><button onClick={onLogout}><LogOut/> Sair</button></div></header>
   <main>
@@ -287,18 +303,24 @@ function OwnerAdmin({user,onLogout}){
  async function save(e){
   e.preventDefault();
   if(!form.nome.trim()){setError("Informe o nome do condomínio.");return}
-  const email=normalizeEmail(form.email);
-  if(!email){setError("Informe o e-mail do responsável para liberar o acesso ao The Door.");return}
-  const payload={nome:form.nome.trim(),responsavel:form.responsavel.trim(),email,telefone:form.telefone.trim(),endereco:form.endereco.trim(),status:form.status,observacoes:form.observacoes.trim(),licenca:{valor:Number(form.valor||0),periodo:form.periodo,inicio:form.inicio||"",vencimento:form.vencimento||"",teste:form.teste,diasTeste:Number(form.diasTeste||0),status:form.status==="suspenso"?"suspensa":(form.teste?"em_teste":(form.vencimento&&form.vencimento<new Date().toISOString().slice(0,10)?"expirada":"ativa"))},updatedAt:serverTimestamp()};
+  const payload={nome:form.nome.trim(),responsavel:form.responsavel.trim(),email:form.email.trim(),telefone:form.telefone.trim(),endereco:form.endereco.trim(),status:form.status,observacoes:form.observacoes.trim(),licenca:{valor:Number(form.valor||0),periodo:form.periodo,inicio:form.inicio||"",vencimento:form.vencimento||"",teste:form.teste,diasTeste:Number(form.diasTeste||0),status:form.status==="suspenso"?"suspensa":(form.teste?"em_teste":(form.vencimento&&form.vencimento<new Date().toISOString().slice(0,10)?"expirada":"ativa"))},updatedAt:serverTimestamp()};
   try{
-   let condoId=editing;
-   if(editing==="new"){const ref=await addDoc(collection(db,"condominios"),{...payload,criadoPor:user.uid,createdAt:serverTimestamp()});condoId=ref.id;await audit("condominio_criado",ref.id,`Cadastro de ${payload.nome}`)}
-   else {await updateDoc(doc(db,"condominios",editing),payload);await audit("condominio_atualizado",editing,`Atualização de ${payload.nome}`)}
-   // Convite de acesso: a responsável cria a própria senha no primeiro acesso.
-   await setDoc(doc(db,"convites",email),{email,nome:form.responsavel.trim(),condominioId:condoId,role:"admin",status:"pending",createdBy:user.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()},{merge:true});
-   await audit("convite_criado",condoId,`Acesso de ${email} vinculado ao condomínio`);
+   if(editing==="new"){
+    const ref=await addDoc(collection(db,"condominios"),{...payload,criadoPor:user.uid,createdAt:serverTimestamp()});
+    if(payload.email.trim()){
+     const emailKey=payload.email.trim().toLowerCase();
+     await setDoc(doc(db,"convites",emailKey),{email:payload.email.trim(),nome:payload.responsavel||"",responsavel:payload.responsavel||"",condominioId:ref.id,role:"admin",status:"active",createdBy:user.uid,createdAt:serverTimestamp()});
+    }
+    await audit("condominio_criado",ref.id,`Cadastro de ${payload.nome}`)
+   } else {
+    await updateDoc(doc(db,"condominios",editing),payload);
+    if(payload.email.trim()){
+     const emailKey=payload.email.trim().toLowerCase();
+     await setDoc(doc(db,"convites",emailKey),{email:payload.email.trim(),nome:payload.responsavel||"",responsavel:payload.responsavel||"",condominioId:editing,role:"admin",status:"active",createdBy:user.uid,updatedAt:serverTimestamp()},{merge:true});
+    }
+    await audit("condominio_atualizado",editing,`Atualização de ${payload.nome}`)
+   }
    setEditing(null);await load();
-   setError("");
   }catch(e){setError("Falha ao salvar. Verifique as regras do Firestore. ("+(e.code||"erro")+")")}
  }
  async function changeStatus(c,status){
@@ -363,7 +385,7 @@ function App(){
  const [user,setUser]=useState(null); const [checking,setChecking]=useState(true); const [profile,setProfile]=useState(null); const [profileLoading,setProfileLoading]=useState(false);
  useEffect(()=>onAuthStateChanged(auth,u=>{setUser(u);setChecking(false);setProfile(null)}),[]);
  useEffect(()=>{let live=true;if(!user){setProfile(null);return}setProfileLoading(true);getDoc(doc(db,"usuarios",user.uid)).then(s=>{if(live)setProfile(s.exists()?s.data():null)}).catch(()=>{if(live)setProfile(null)}).finally(()=>{if(live)setProfileLoading(false)});return()=>{live=false}},[user?.uid]);
- if(checking|| (user&&profileLoading)) return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="The Door"/><h1>The Door</h1><p>Verificando sua sessão...</p></div></div>;
+ if(checking|| (user&&profileLoading)) return <div className="auth-screen"><div className="auth-card"><img src={brandIcon} alt="The Door"/><h1>The Door</h1><p>Verificando sua sessão...</p></div></div>;
  if(!user) return <LoginScreen/>;
  if(profile?.role==="owner"&&profile?.status==="active")return <OwnerAdmin user={user} onLogout={()=>signOut(auth)}/>;
  return <AppContent user={user} onLogout={()=>signOut(auth)}/>;
@@ -376,11 +398,11 @@ function LoginScreen(){
   const ios=/(iPhone|iPad|iPod)/i.test(ua);
   setEmbedded(inApp && ios);
  },[]);
- async function run(action){setBusy(true);setError("");try{await action()}catch(e){const map={"auth/invalid-credential":"E-mail ou senha incorretos.","auth/user-not-found":"Conta não encontrada.","auth/wrong-password":"E-mail ou senha incorretos.","auth/email-already-in-use":"Este e-mail já possui cadastro.","auth/weak-password":"A senha deve ter pelo menos 6 caracteres.","auth/popup-closed-by-user":"A janela de login foi fechada.","auth/popup-blocked":"O navegador bloqueou a janela de login. Abra o The Door no Safari ou Chrome e tente novamente.","auth/web-storage-unsupported":"O navegador não permitiu o armazenamento necessário para o login. Abra o The Door no Safari ou Chrome.","auth/unauthorized-domain":"Este domínio não está autorizado no Firebase.","auth/operation-not-allowed":"Ative este método de login no Firebase Authentication.","invite-required":"Este e-mail ainda não foi liberado pelo administrador do The Door. Peça o convite ao proprietário.","invite-invalid":"Este convite não está mais válido. Peça um novo convite ao proprietário."};setError(map[e.code]||`Não foi possível entrar. (${e.code||"erro"})`)}finally{setBusy(false)}}
+ async function run(action){setBusy(true);setError("");try{await action()}catch(e){const map={"auth/invalid-credential":"E-mail ou senha incorretos.","auth/user-not-found":"Conta não encontrada.","auth/wrong-password":"E-mail ou senha incorretos.","auth/email-already-in-use":"Este e-mail já possui cadastro.","auth/weak-password":"A senha deve ter pelo menos 6 caracteres.","auth/popup-closed-by-user":"A janela de login foi fechada.","auth/popup-blocked":"O navegador bloqueou a janela de login. Abra o The Door no Safari ou Chrome e tente novamente.","auth/web-storage-unsupported":"O navegador não permitiu o armazenamento necessário para o login. Abra o The Door no Safari ou Chrome.","auth/unauthorized-domain":"Este domínio não está autorizado no Firebase.","auth/operation-not-allowed":"Ative este método de login no Firebase Authentication."};setError(map[e.code]||`Não foi possível entrar. (${e.code||"erro"})`)}finally{setBusy(false)}}
  function openExternal(){
   try{window.open(window.location.href,"_blank","noopener,noreferrer");}catch{}
   setError("Se esta tela continuar no WhatsApp, toque em ⋯ e escolha “Abrir no navegador” ou copie o endereço e abra no Safari.");
  }
- return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="Logo The Door"/><div className="auth-eyebrow">LOGÍSTICA DE ENCOMENDAS</div><h1>Bem-vindo ao The Door</h1><p className="auth-subtitle">Entre para acessar a gestão de encomendas do seu condomínio.</p>{embedded&&<div className="auth-browser-warning" role="alert"><strong>Abra o The Door no Safari</strong><span>O navegador do WhatsApp pode bloquear o login do Google. Toque em <b>⋯</b> e escolha <b>“Abrir no navegador”</b>.</span><button type="button" className="secondary wide" onClick={openExternal}>Tentar abrir no navegador</button></div>}<button className="google-button" disabled={busy||embedded} onClick={()=>run(()=>signInWithPopup(auth,new GoogleAuthProvider()))}><span className="google-g">G</span> Continuar com Google</button><div className="auth-separator"><span>ou use seu e-mail</span></div><form className="auth-form" onSubmit={e=>{e.preventDefault();run(async()=>{if(mode!=="register"){await signInWithEmailAndPassword(auth,normalizeEmail(email),password);return}const credential=await createUserWithEmailAndPassword(auth,normalizeEmail(email),password);const inviteSnap=await getDoc(doc(db,"convites",normalizeEmail(email)));if(!inviteSnap.exists()){await credential.user.delete();const err=new Error("invite-required");err.code="invite-required";throw err}const invite=inviteSnap.data();if(invite.status!=="pending"||normalizeEmail(invite.email)!==normalizeEmail(email)){await credential.user.delete();const err=new Error("invite-invalid");err.code="invite-invalid";throw err}await setDoc(doc(db,"usuarios",credential.user.uid),{nome:invite.nome||credential.user.displayName||"",email:normalizeEmail(email),role:invite.role||"admin",status:"active",condominioId:String(invite.condominioId),createdAt:serverTimestamp()});})}}><label>E-mail<input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="voce@exemplo.com"/></label><label>Senha<input type="password" autoComplete={mode==="register"?"new-password":"current-password"} value={password} onChange={e=>setPassword(e.target.value)} required minLength={6} placeholder="Mínimo de 6 caracteres"/></label>{error&&<p className="auth-error" role="alert">{error}</p>}<button className="primary wide" disabled={busy}>{busy?"Aguarde...":mode==="register"?"Criar conta":"Entrar"}</button></form><button className="auth-switch" onClick={()=>{setMode(mode==="register"?"login":"register");setError("")}}>{mode==="register"?"Já tem uma conta? Entrar":"Primeiro acesso? Criar conta com e-mail"}</button><p className="auth-footnote">Os dados do condomínio são sincronizados pela nuvem. O acesso precisa ser liberado pelo administrador do The Door.</p></div></div>
+ return <div className="auth-screen"><div className="auth-card"><img src={brandIcon} alt="Logo The Door"/><div className="auth-eyebrow">LOGÍSTICA DE ENCOMENDAS</div><h1>Bem-vindo ao The Door</h1><p className="auth-subtitle">Entre para acessar a gestão de encomendas do seu condomínio.</p>{embedded&&<div className="auth-browser-warning" role="alert"><strong>Abra o The Door no Safari</strong><span>O navegador do WhatsApp pode bloquear o login do Google. Toque em <b>⋯</b> e escolha <b>“Abrir no navegador”</b>.</span><button type="button" className="secondary wide" onClick={openExternal}>Tentar abrir no navegador</button></div>}<button className="google-button" disabled={busy||embedded} onClick={()=>run(()=>signInWithPopup(auth,new GoogleAuthProvider()))}><span className="google-g">G</span> Continuar com Google</button><div className="auth-separator"><span>ou use seu e-mail</span></div><form className="auth-form" onSubmit={e=>{e.preventDefault();run(()=>mode==="register"?createUserWithEmailAndPassword(auth,email,password):signInWithEmailAndPassword(auth,email,password))}}><label>E-mail<input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="voce@exemplo.com"/></label><label>Senha<input type="password" autoComplete={mode==="register"?"new-password":"current-password"} value={password} onChange={e=>setPassword(e.target.value)} required minLength={6} placeholder="Mínimo de 6 caracteres"/></label>{error&&<p className="auth-error" role="alert">{error}</p>}<button className="primary wide" disabled={busy}>{busy?"Aguarde...":mode==="register"?"Criar conta":"Entrar"}</button></form><button className="auth-switch" onClick={()=>{setMode(mode==="register"?"login":"register");setError("")}}>{mode==="register"?"Já tem uma conta? Entrar":"Primeiro acesso? Criar conta com e-mail"}</button><p className="auth-footnote">Os dados do condomínio são sincronizados pela nuvem. O acesso precisa ser liberado pelo administrador do The Door.</p></div></div>
 }
 createRoot(document.getElementById("root")).render(<App/>);
