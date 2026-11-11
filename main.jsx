@@ -5,7 +5,7 @@ import { doc, getDoc, onSnapshot, setDoc, serverTimestamp, collection, getDocs, 
 import { auth, db } from "./firebase.js";
 import QRCode from "qrcode";
 import {Html5Qrcode,Html5QrcodeSupportedFormats} from "html5-qrcode";
-import {PackagePlus,ScanLine,Users,History,Truck,MapPin,Trash2,Send,Search,Home,LogOut,Plus,CheckCircle2,Clock,ChevronRight,Pencil,UserPlus,MessageSquare,Building2,ShieldCheck,Wallet,CalendarDays,RefreshCw,Mail,FileText} from "lucide-react";
+import {PackagePlus,ScanLine,Users,History,Truck,MapPin,Trash2,Send,Search,Home,LogOut,Plus,CheckCircle2,Clock,ChevronRight,Pencil,UserPlus,MessageSquare,Building2,ShieldCheck,Wallet,CalendarDays,RefreshCw,Mail,FileText,Menu,X} from "lucide-react";
 import "./styles.css";
 import brandIcon from "./the-door-icon.png";
 
@@ -48,7 +48,7 @@ function openWhatsAppChat(phone,message){
 function AppContent({user,onLogout}){
  const [data,setData]=useState(initial); const [tab,setTab]=useState("home"); const [query,setQuery]=useState("");
  const [showAdd,setShowAdd]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null);
- const [notice,setNotice]=useState(""); const [editingNotification,setEditingNotification]=useState(null); const [showCorrespondence,setShowCorrespondence]=useState(false);
+ const [notice,setNotice]=useState(""); const [showMenu,setShowMenu]=useState(false); const [editingNotification,setEditingNotification]=useState(null); const [showCorrespondence,setShowCorrespondence]=useState(false);
  const [tenantId,setTenantId]=useState(""); const [cloudReady,setCloudReady]=useState(false); const [cloudError,setCloudError]=useState("");
  const lastCloudJson=useRef(""); const applyingCloud=useRef(false);
  // O perfil do usuário é provisionado pelo administrador no Firestore; o cliente não pode definir seu próprio condomínio.
@@ -209,7 +209,8 @@ function AppContent({user,onLogout}){
    {tab==="couriers"&&<><SectionTitle icon={<Truck/>} title="Entregadores"/><div className="toolbar"><button className="primary" onClick={()=>setShowCourier(true)}><Plus/> Cadastrar entregador</button></div><div className="cards">{data.couriers.map(c=><div className="card" key={c.id}><b>{c.name}</b><small>{c.company||"Sem empresa"} • {c.phone||"Sem telefone"}</small><small>Documento: {c.doc||"—"} • Placa: {c.plate||"—"}</small></div>)}</div></>}
    {tab==="history"&&<><SectionTitle icon={<History/>} title="Histórico de retiradas"/><OrderList orders={orders.filter(o=>o.status==="Retirada")} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation}/></>}
   </main>
-  <nav>{[["home","Início",Home],["orders","Encomendas",History],["correspondences","Cartas",Mail],["notifications","Avisos",MessageSquare],["residents","Moradores",Users],["couriers","Entregadores",Truck],["history","Histórico",Clock]].map(([k,l,I])=><button className={tab===k?"active":""} onClick={()=>setTab(k)} key={k}><I/><span>{l}</span></button>)}</nav>
+  <nav className="bottom-nav">{[["home","Início",Home],["orders","Encomendas",History],["correspondences","Cartas",Mail]].map(([k,l,I])=><button className={tab===k?"active":""} onClick={()=>setTab(k)} key={k}><I/><span>{l}</span></button>)}<button className={showMenu?"active":""} onClick={()=>setShowMenu(true)}><Menu/><span>Menu</span></button></nav>
+  {showMenu&&<div className="menu-overlay" onClick={()=>setShowMenu(false)}><aside className="menu-drawer" onClick={e=>e.stopPropagation()}><div className="menu-head"><div><span className="eyebrow">THE DOOR</span><h2>Menu</h2></div><button className="menu-close" onClick={()=>setShowMenu(false)}><X/></button></div><div className="menu-items">{[["notifications","Avisos",MessageSquare],["residents","Moradores",Users],["couriers","Entregadores",Truck],["history","Histórico",Clock]].map(([k,l,I])=><button key={k} onClick={()=>{setTab(k);setShowMenu(false)}}><I/><span>{l}</span>{k==="notifications"&&notificationQueue.length>0?<b className="menu-count">{notificationQueue.length}</b>:null}<ChevronRight/></button>)}</div><div className="menu-footer"><small>{user.email||user.displayName||"Usuário"}</small><button onClick={onLogout}><LogOut/><span>Sair da conta</span></button></div></aside></div>}
   {showAdd&&<AddOrder data={data} onClose={()=>setShowAdd(false)} onSave={addOrder}/>}
   {editingNotification&&<EditNotification order={editingNotification} resident={data.residents.find(r=>r.id===editingNotification.residentId)} initialMessage={notificationMessage(editingNotification)} onClose={()=>setEditingNotification(null)} onSave={message=>saveEditedNotification(editingNotification.id,message)}/>}
   {showResident&&<ResidentForm resident={residentEdit} unit={residentUnit} onClose={()=>{setShowResident(false);setResidentEdit(null);setResidentUnit(null)}} onSave={r=>{setData(d=>({...d,residents:residentEdit?d.residents.map(old=>old.id===residentEdit.id?{...old,...r,id:old.id}:old):[...d.residents,{...r,id:uid("mor")}] }));setShowResident(false);setResidentEdit(null);setResidentUnit(null);notify(residentEdit?"Morador atualizado com sucesso.":"Morador cadastrado na unidade.")}}/>}
