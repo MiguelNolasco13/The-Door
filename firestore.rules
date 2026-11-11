@@ -2,47 +2,41 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function profileExists() { return signedIn() && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)); }
-    function activeUser() { return profileExists() && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.status == "active"; }
-    function isOwner() { return activeUser() && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role == "owner"; }
-    function hasActiveMembership(condominioId) { return activeUser() && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.condominioId == condominioId; }
-
-    match /convites/{emailKey} {
-      allow get: if signedIn() && request.auth.token.email == resource.data.email;
-      allow list: if false;
-      allow create: if isOwner();
-      allow update: if isOwner() || (signedIn()
-        && request.auth.token.email == resource.data.email
-        && request.resource.data.email == resource.data.email
-        && request.resource.data.condominioId == resource.data.condominioId
-        && request.resource.data.role == resource.data.role
-        && request.resource.data.status == resource.data.status
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "usedBy", "usedAt"]));
-      allow delete: if isOwner();
+    function profileExists() {
+      return signedIn() && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
+    }
+    function activeUser() {
+      return profileExists()
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.status == "active";
+    }
+    function isOwner() {
+      return activeUser()
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role == "owner";
+    }
+    function hasActiveMembership(condominioId) {
+      return activeUser()
+        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.condominioId == condominioId;
     }
 
     match /usuarios/{userId} {
       allow get: if signedIn() && (request.auth.uid == userId || isOwner());
       allow list: if isOwner();
-      allow create: if isOwner() || (signedIn() && request.auth.uid == userId
-        && request.resource.data.role == "admin"
-        && request.resource.data.status == "active"
-        && request.resource.data.email == request.auth.token.email
-        && exists(/databases/$(database)/documents/convites/$(request.auth.token.email))
-        && get(/databases/$(database)/documents/convites/$(request.auth.token.email)).data.status == "active"
-        && get(/databases/$(database)/documents/convites/$(request.auth.token.email)).data.condominioId == request.resource.data.condominioId);
-      allow update, delete: if isOwner();
+      // Perfis e vínculos são provisionados pelo proprietário no Console do Firebase.
+      allow create, update, delete: if false;
     }
 
     match /condominios/{condominioId} {
       allow read: if isOwner() || hasActiveMembership(condominioId);
       allow create, update, delete: if isOwner();
-      match /dados/{docId} { allow read, write: if isOwner() || hasActiveMembership(condominioId); }
+      match /dados/{docId} {
+        allow read, write: if isOwner() || hasActiveMembership(condominioId);
+      }
     }
 
     match /admin_logs/{logId} {
       allow read: if isOwner();
-      allow create: if isOwner() && request.resource.data.autorUid == request.auth.uid;
+      allow create: if isOwner()
+        && request.resource.data.autorUid == request.auth.uid;
       allow update, delete: if false;
     }
   }
