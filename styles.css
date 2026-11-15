@@ -115,3 +115,11 @@
 .side-menu .menu-divider{height:1px;background:rgba(255,255,255,.1);margin:10px 0}
 @media (min-width:760px){.icon-menu-btn{display:inline-flex!important}}
 @media (max-width:759px){.header-actions .user-email{display:none}.header-actions .icon-menu-btn{display:inline-flex!important}.header-actions button{padding:10px 13px}.bottom-nav{display:grid!important}}
+
+/* Seleção e baixa em lote */
+.bulk-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 14px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(120deg,#2b241b,#211f1b)}
+.bulk-bar>div:first-child{display:flex;flex-direction:column;gap:3px}.bulk-bar small{color:var(--muted)}
+.bulk-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.bulk-actions button{display:inline-flex;align-items:center;gap:6px}
+.order-select{display:flex;align-items:center;justify-content:center;flex:0 0 34px;margin-right:4px}.order-select input{width:20px;height:20px;accent-color:var(--gold)}
+.selected-order{border-color:var(--gold)!important;box-shadow:0 0 0 1px #dcae4a33}
+@media(max-width:700px){.bulk-bar{display:block}.bulk-actions{margin-top:10px;display:grid;grid-template-columns:1fr 1fr}.bulk-actions .primary{grid-column:1/-1;width:100%}.order-select{position:absolute;left:8px;top:12px}.order.selected-order,.order{position:relative}.order-select+img{margin-left:28px}}
