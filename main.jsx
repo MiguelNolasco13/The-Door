@@ -5,14 +5,14 @@ import { doc, getDoc, onSnapshot, setDoc, serverTimestamp, collection, getDocs, 
 import { auth, db } from "./firebase.js";
 import QRCode from "qrcode";
 import {Html5Qrcode,Html5QrcodeSupportedFormats} from "html5-qrcode";
-import {PackagePlus,ScanLine,Users,History,Truck,MapPin,Trash2,Send,Search,Home,LogOut,Plus,CheckCircle2,Clock,ChevronRight,Pencil,UserPlus,MessageSquare,Building2,ShieldCheck,Wallet,CalendarDays,RefreshCw,Mail,FileText} from "lucide-react";
+import {PackagePlus,ScanLine,Users,History,Truck,MapPin,Trash2,Send,Search,Home,LogOut,Plus,CheckCircle2,Clock,ChevronRight,Pencil,UserPlus,MessageSquare,Building2,ShieldCheck,Wallet,CalendarDays,RefreshCw} from "lucide-react";
 import "./styles.css";
 import brandIcon from "./the-door-icon.png";
 
-const initial={residents:[],couriers:[],orders:[],correspondences:[]};
+const initial={residents:[],couriers:[],orders:[]};
 // Fotos ficam locais nesta primeira etapa: Firestore não é armazenamento de imagens e cada documento tem limite de 1 MiB.
-function stripPhotos(value){return {residents:value.residents||[],couriers:value.couriers||[],orders:(value.orders||[]).map(({photo,...order})=>order),correspondences:(value.correspondences||[]).map(({photo,...item})=>item)};}
-function mergeLocalPhotos(cloud,current){const photos=new Map((current.orders||[]).filter(o=>o.photo).map(o=>[o.id,o.photo]));const correspondencePhotos=new Map((current.correspondences||[]).filter(o=>o.photo).map(o=>[o.id,o.photo]));return {...cloud,orders:(cloud.orders||[]).map(o=>photos.has(o.id)?{...o,photo:photos.get(o.id)}:o),correspondences:(cloud.correspondences||[]).map(o=>correspondencePhotos.has(o.id)?{...o,photo:correspondencePhotos.get(o.id)}:o)};}
+function stripPhotos(value){return {residents:value.residents||[],couriers:value.couriers||[],orders:(value.orders||[]).map(({photo,...order})=>order)};}
+function mergeLocalPhotos(cloud,current){const photos=new Map((current.orders||[]).filter(o=>o.photo).map(o=>[o.id,o.photo]));return {...cloud,orders:(cloud.orders||[]).map(o=>photos.has(o.id)?{...o,photo:photos.get(o.id)}:o)};}
 
 function load(userId){
  try{
@@ -25,7 +25,7 @@ function load(userId){
  }catch{return initial}
 }
 function uid(p="id"){return p+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,7)}
-function inviteIdForEmail(email){return String(email||"").trim().toLowerCase()}
+function normalizeEmail(email){return String(email||"").trim().toLowerCase()}
 // WhatsApp gratuito: abre uma conversa com texto preenchido; o usuário confirma o envio.
 function phoneForWhatsApp(phone){
  let n=String(phone||"").replace(/\D/g,"");
@@ -49,8 +49,8 @@ function openWhatsAppChat(phone,message){
 function AppContent({user,onLogout}){
  const [data,setData]=useState(initial); const [tab,setTab]=useState("home"); const [query,setQuery]=useState("");
  const [showAdd,setShowAdd]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null);
- const [notice,setNotice]=useState(""); const [editingNotification,setEditingNotification]=useState(null); const [showCorrespondence,setShowCorrespondence]=useState(false);
- const [tenantId,setTenantId]=useState(""); const [cloudReady,setCloudReady]=useState(false); const [cloudError,setCloudError]=useState("");
+ const [notice,setNotice]=useState(""); const [editingNotification,setEditingNotification]=useState(null);
+ const [tenantId,setTenantId]=useState(""); const [tenantName,setTenantName]=useState(""); const [cloudReady,setCloudReady]=useState(false); const [cloudError,setCloudError]=useState("");
  const lastCloudJson=useRef(""); const applyingCloud=useRef(false);
  // O perfil do usuário é provisionado pelo administrador no Firestore; o cliente não pode definir seu próprio condomínio.
  useEffect(()=>{
@@ -59,31 +59,15 @@ function AppContent({user,onLogout}){
    try{
     const profileSnap=await getDoc(doc(db,"usuarios",user.uid));
     if(!active)return;
-    if(!profileSnap.exists()) {
-     const email=String(user.email||"").trim().toLowerCase();
-     if(email){
-      try{
-       const inviteSnap=await getDoc(doc(db,"convites",inviteIdForEmail(email)));
-       if(inviteSnap.exists()){
-        const invite=inviteSnap.data();
-        if(String(invite.email||"").trim().toLowerCase()===email && invite.status!=="cancelado" && invite.condominioId){
-         await setDoc(doc(db,"usuarios",user.uid),{nome:invite.nome||user.displayName||email.split("@")[0],email,role:invite.role||"admin",status:"active",condominioId:String(invite.condominioId),createdAt:serverTimestamp(),provisionadoPorConvite:true},{merge:true});
-         const fresh=await getDoc(doc(db,"usuarios",user.uid));
-         if(fresh.exists()){setCloudError("");}
-         else {setCloudError("Não foi possível concluir o vínculo do usuário.");return;}
-        }else{setCloudError("Seu convite de acesso está inválido ou cancelado. Peça ao administrador do The Door para reenviar o acesso.");return;}
-       }else{setCloudError("Seu usuário ainda não foi vinculado a um condomínio. Peça ao administrador do The Door para concluir seu cadastro.");return;}
-      }catch(e){setCloudError(e.code==="permission-denied"?"O convite existe, mas as regras do Firestore ainda não permitem concluir o vínculo. Publique as novas regras do The Door.":"Não foi possível concluir o vínculo do usuário.");return;}
-     }
-     else {setCloudError("Sua conta não possui e-mail. Não foi possível localizar o convite de acesso.");return;}
-    }
-    const profile= (await getDoc(doc(db,"usuarios",user.uid))).data();
+    if(!profileSnap.exists()) {setCloudError("Seu usuário ainda não foi vinculado a um condomínio. Peça ao administrador do The Door para concluir seu cadastro.");return;}
+    const profile=profileSnap.data();
     if(profile.status!=="active"||!profile.condominioId){setCloudError("Seu acesso está inativo ou ainda não foi vinculado a um condomínio. Entre em contato com o administrador.");return;}
     const cid=String(profile.condominioId); setTenantId(cid);
     const condoSnap=await getDoc(doc(db,"condominios",cid));
     if(!active)return;
     if(condoSnap.exists()){
      const condo=condoSnap.data(), license=condo.licenca||{};
+     setTenantName(String(condo.nome||"Condomínio"));
      const today=new Date().toISOString().slice(0,10);
      if(["suspenso","inativo"].includes(String(condo.status||"").toLowerCase()) || ["suspensa","suspenso","expirada","cancelada"].includes(String(license.status||"").toLowerCase()) || (license.vencimento&&license.vencimento<today)){
       setCloudError("A licença deste condomínio está suspensa ou vencida. Entre em contato com o administrador do The Door para regularizar o acesso.");return;
@@ -93,10 +77,10 @@ function AppContent({user,onLogout}){
     stopData=onSnapshot(dataRef,async snap=>{
      if(!active)return;
      if(!snap.exists()){
-      try{await setDoc(dataRef,{residents:[],couriers:[],orders:[],correspondences:[],updatedAt:serverTimestamp()},{merge:false});}catch(e){if(active)setCloudError("Não foi possível inicializar os dados do condomínio. Confira as regras do Firestore.");}
+      try{await setDoc(dataRef,{residents:[],couriers:[],orders:[],updatedAt:serverTimestamp()},{merge:false});}catch(e){if(active)setCloudError("Não foi possível inicializar os dados do condomínio. Confira as regras do Firestore.");}
       return;
      }
-     const cloud=snap.data(); const clean={residents:Array.isArray(cloud.residents)?cloud.residents:[],couriers:Array.isArray(cloud.couriers)?cloud.couriers:[],orders:Array.isArray(cloud.orders)?cloud.orders:[],correspondences:Array.isArray(cloud.correspondences)?cloud.correspondences:[]};
+     const cloud=snap.data(); const clean={residents:Array.isArray(cloud.residents)?cloud.residents:[],couriers:Array.isArray(cloud.couriers)?cloud.couriers:[],orders:Array.isArray(cloud.orders)?cloud.orders:[]};
      lastCloudJson.current=JSON.stringify(stripPhotos(clean));
      applyingCloud.current=true;
      setData(current=>mergeLocalPhotos(clean,current));
@@ -190,51 +174,24 @@ function AppContent({user,onLogout}){
  function openWhatsApp(phone,msg){if(!whatsappUrl(phone,msg)){notify("Confira o telefone do morador com DDD e código do país antes de enviar pelo WhatsApp.");return}if(!openWhatsAppChat(phone,msg))notify("O navegador bloqueou a nova janela. Permita pop-ups para o The Door e tente novamente.")}
   function sendWhatsApp(o){const r=data.residents.find(x=>x.id===o.residentId);if(!r){notify("Cadastre ou vincule um morador para enviar a mensagem.");return}const msg=`Olá, ${r.name}! Sua encomenda ${o.code} está disponível para retirada na portaria. Apresente o QR Code desta encomenda ou informe o código ${o.tracking||o.code} ao atendente. Obrigado!`;openWhatsApp(r.phone,msg)}
   function sendPickupConfirmation(o,method){const r=data.residents.find(x=>x.id===o.residentId);if(!r){notify("Retirada registrada, mas não foi possível enviar a mensagem: morador sem telefone vinculado.");return}const msg=`Olá, ${r.name}! Confirmamos que sua encomenda ${o.code} foi retirada na portaria por ${method==="QR Code"?"meio do QR Code":"meio do código de barras"}. Obrigado!`;openWhatsApp(r.phone,msg)}
- function addCorrespondence(item){
-  const newItem={...item,id:uid("cor"),status:"Aguardando retirada",receivedAt:new Date().toISOString()};
-  setData(d=>({...d,correspondences:[newItem,...(d.correspondences||[])]}));
-  setShowCorrespondence(false);
-  notify("Correspondência registrada e disponível para retirada.");
- }
- function checkoutCorrespondence(id,method="manual") {
-  const item=(data.correspondences||[]).find(x=>x.id===id);
-  if(!item)return;
-  setData(d=>({...d,correspondences:d.correspondences.map(x=>x.id===id?{...x,status:"Entregue",deliveredAt:new Date().toISOString(),pickupMethod:method}:x)}));
-  notify("Correspondência marcada como entregue.");
- }
- function deleteCorrespondence(id){if(confirm("Excluir esta correspondência?"))setData(d=>({...d,correspondences:d.correspondences.filter(x=>x.id!==id)}));}
- function scannedCorrespondence(value){
-  const clean=String(value||"").trim().toLowerCase();
-  if(!clean)return;
-  const item=(data.correspondences||[]).find(x=>String(x.tracking||"").trim().toLowerCase()===clean);
-  if(item){
-   if(item.status==="Aguardando retirada") { checkoutCorrespondence(item.id,"código de barras"); setScan(false); }
-   else { notify("Esta correspondência já consta como entregue."); setScan(false); }
-   return;
-  }
-  notify("Código não encontrado. Para cadastrar uma nova correspondência, use o botão Nova correspondência.");
- }
- if(cloudError&&!cloudReady)return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="Logo The Door"/><h1>The Door</h1><p>{cloudError}</p><button className="primary wide" onClick={()=>signOut(auth)}>Sair</button></div></div>;
- if(!cloudReady)return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="Logo The Door"/><h1>The Door</h1><p>Conectando ao condomínio e sincronizando os dados...</p></div></div>;
+ if(cloudError&&!cloudReady)return <div className="auth-screen"><div className="auth-card"><img src={brandIcon} alt="Logo The Door"/><h1>The Door</h1><p>{cloudError}</p><button className="primary wide" onClick={()=>signOut(auth)}>Sair</button></div></div>;
+ if(!cloudReady)return <div className="auth-screen"><div className="auth-card"><img src={brandIcon} alt="Logo The Door"/><h1>The Door</h1><p>Conectando ao condomínio e sincronizando os dados...</p></div></div>;
  return <div className="app">
-  <header className="app-header"><div className="brand"><div className="brand-mark"><img className="brand-logo" src={brandIcon} alt="Logo The Door"/></div><div className="brand-copy"><b>THE DOOR</b><span className="brand-line"></span><small>Gestão de encomendas e correspondências</small></div></div><div className="header-status"><span className="status-dot"></span><span>Portaria</span></div></header>
+  <header><div className="brand"><img className="brand-logo" src={brandIcon} alt="Logo The Door"/><div><b>THE DOOR</b><small className="condo-name">{tenantName||"Condomínio"}</small><small>Gestão de encomendas e correspondências</small></div></div><div className="header-actions"><span className="user-email">{user.email||user.displayName||"Usuário"}</span><button onClick={()=>setScan(true)}><ScanLine/> Ler código</button><button onClick={onLogout}><LogOut/> Sair</button></div></header>
   <main>
    {tab==="home"&&<Dashboard pending={pending} orders={orders} onAdd={()=>setShowAdd(true)} onScan={()=>setScan(true)} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder}/>}
    {tab==="orders"&&<><SectionTitle icon={<History/>} title="Encomendas"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar código, morador, apartamento..."/></div><button className="primary" onClick={()=>setShowAdd(true)}><Plus/> Nova encomenda</button></div><OrderList orders={filtered} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation}/></>}
-   {tab==="correspondences"&&<CorrespondenceView data={data} query={query} setQuery={setQuery} onAdd={()=>setShowCorrespondence(true)} onCheckout={checkoutCorrespondence} onDelete={deleteCorrespondence} onScan={()=>setScan("correspondence")}/>}
    {tab==="residents"&&<><SectionTitle icon={<Users/>} title="Moradores por unidade"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar nome, telefone, bloco ou apartamento..."/></div><button className="primary" onClick={()=>{setResidentEdit(null);setResidentUnit(null);setShowResident(true)}}><Plus/> Cadastrar morador</button></div><div className="unit-list">{Object.entries(data.residents.filter(r=>JSON.stringify(r).toLowerCase().includes(query.toLowerCase())).reduce((groups,r)=>{const key=[r.block,r.street,r.quadra,r.apt].map(v=>(v||"").trim().toLowerCase()).join("|");if(!groups[key])groups[key]={key,block:r.block,street:r.street,quadra:r.quadra,apt:r.apt,residents:[]};groups[key].residents.push(r);return groups;},{})).sort((a,b)=>`${a[1].street} ${a[1].quadra} ${a[1].block} ${a[1].apt}`.localeCompare(`${b[1].street} ${b[1].quadra} ${b[1].block} ${b[1].apt}`,"pt-BR")).map(([key,u])=><div className="card unit-card" key={key}><div className="unit-heading"><div className="unit-icon"><MapPin/></div><div className="unit-title"><b>Unidade {u.apt||"não informada"}</b><small>{[u.block&&`Bloco ${u.block}`,u.street,u.quadra&&`Quadra ${u.quadra}`].filter(Boolean).join(" • ")||"Endereço não informado"}</small><small>{u.residents.length} morador(es) cadastrado(s)</small></div><button className="unit-add" onClick={()=>{setResidentEdit(null);setResidentUnit(u);setShowResident(true)}}><UserPlus/> Adicionar</button></div><div className="unit-residents">{u.residents.map(r=><div className="resident-row" key={r.id}><div className="resident-info"><b>{r.name}</b><small>WhatsApp: {r.phone||"Não informado"}</small></div><button className="edit-resident" title="Editar morador" onClick={()=>{setResidentEdit(r);setResidentUnit(null);setShowResident(true)}}><Pencil/> Editar</button></div>)}</div></div>)}</div>{data.residents.length===0&&<div className="empty">Nenhum morador cadastrado. Use “Cadastrar morador” para começar.</div>}</>}
    {tab==="notifications"&&<><SectionTitle icon={<MessageSquare/>} title="Central de Notificações"/><div className="notification-intro card"><b>{notificationQueue.length} aviso(s) pendente(s)</b><small>Abra cada conversa, envie a mensagem no WhatsApp e depois marque o aviso como enviado. Encomendas retiradas saem automaticamente desta fila.</small></div>{notificationQueue.length===0?<div className="empty">Nenhum aviso pendente. Os novos avisos cadastrados para envio posterior aparecerão aqui.</div>:<div className="cards">{notificationQueue.map(o=>{const r=data.residents.find(x=>x.id===o.residentId);return <div className="card notification-card" key={o.id}><div className="order-main"><div className="code">{o.code}</div><b>{r?.name||o.residentName||"Morador não vinculado"}</b><small>{r?`Bloco ${r.block||"—"} • Apto ${r.apt||"—"}`:o.address||"Unidade não informada"}</small><small>Recebida: {new Date(o.receivedAt).toLocaleString("pt-BR")}</small><span className="badge">Aviso pendente</span></div><div className="notification-actions"><button onClick={()=>setEditingNotification(o)}><Pencil size={16}/> Editar mensagem</button><button className="primary" onClick={()=>openQueuedNotification(o)}><Send size={16}/> Abrir WhatsApp</button><button onClick={()=>{if(confirm("Confirma que a mensagem foi enviada pelo WhatsApp?"))markNotificationSent(o.id)}}><CheckCircle2 size={16}/> Marcar enviada</button></div></div>})}</div>}</>}
    {tab==="couriers"&&<><SectionTitle icon={<Truck/>} title="Entregadores"/><div className="toolbar"><button className="primary" onClick={()=>setShowCourier(true)}><Plus/> Cadastrar entregador</button></div><div className="cards">{data.couriers.map(c=><div className="card" key={c.id}><b>{c.name}</b><small>{c.company||"Sem empresa"} • {c.phone||"Sem telefone"}</small><small>Documento: {c.doc||"—"} • Placa: {c.plate||"—"}</small></div>)}</div></>}
    {tab==="history"&&<><SectionTitle icon={<History/>} title="Histórico de retiradas"/><OrderList orders={orders.filter(o=>o.status==="Retirada")} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation}/></>}
-   {tab==="menu"&&<><SectionTitle icon={<ChevronRight/>} title="Menu"/><div className="menu-grid"><button className="menu-item" onClick={()=>setTab("notifications")}><MessageSquare/><span><b>Avisos</b><small>Central de notificações</small></span><ChevronRight/></button><button className="menu-item" onClick={()=>setTab("residents")}><Users/><span><b>Moradores</b><small>Cadastros e unidades</small></span><ChevronRight/></button><button className="menu-item" onClick={()=>setTab("couriers")}><Truck/><span><b>Entregadores</b><small>Empresas e entregadores</small></span><ChevronRight/></button><button className="menu-item" onClick={()=>setTab("history")}><Clock/><span><b>Histórico</b><small>Retiradas realizadas</small></span><ChevronRight/></button><button className="menu-item menu-exit" onClick={onLogout}><LogOut/><span><b>Sair</b><small>Encerrar sessão</small></span></button></div></>}
   </main>
-  <nav className="bottom-nav">{[["home","Início",Home],["orders","Encomendas",PackagePlus],["correspondences","Cartas",Mail],["menu","Menu",ChevronRight]].map(([k,l,I])=><button className={tab===k?"active":""} onClick={()=>setTab(k)} key={k}><I/><span>{l}</span></button>)}</nav>
+  <nav>{[["home","Início",Home],["orders","Encomendas",History],["notifications","Avisos",MessageSquare],["residents","Moradores",Users],["couriers","Entregadores",Truck],["history","Histórico",Clock]].map(([k,l,I])=><button className={tab===k?"active":""} onClick={()=>setTab(k)} key={k}><I/><span>{l}</span></button>)}</nav>
   {showAdd&&<AddOrder data={data} onClose={()=>setShowAdd(false)} onSave={addOrder}/>}
   {editingNotification&&<EditNotification order={editingNotification} resident={data.residents.find(r=>r.id===editingNotification.residentId)} initialMessage={notificationMessage(editingNotification)} onClose={()=>setEditingNotification(null)} onSave={message=>saveEditedNotification(editingNotification.id,message)}/>}
   {showResident&&<ResidentForm resident={residentEdit} unit={residentUnit} onClose={()=>{setShowResident(false);setResidentEdit(null);setResidentUnit(null)}} onSave={r=>{setData(d=>({...d,residents:residentEdit?d.residents.map(old=>old.id===residentEdit.id?{...old,...r,id:old.id}:old):[...d.residents,{...r,id:uid("mor")}] }));setShowResident(false);setResidentEdit(null);setResidentUnit(null);notify(residentEdit?"Morador atualizado com sucesso.":"Morador cadastrado na unidade.")}}/>}
   {showCourier&&<CourierForm onClose={()=>setShowCourier(false)} onSave={c=>{setData(d=>({...d,couriers:[...d.couriers,{...c,id:uid("ent")}] }));setShowCourier(false)}}/>}
-  {scan&&<Scanner orders={orders} onClose={()=>setScan(false)} onRead={scan==="correspondence"?scannedCorrespondence:scannedCheckout} title={scan==="correspondence"?"Ler código da correspondência":"Ler código de barras ou QR Code"}/>}
-  {showCorrespondence&&<CorrespondenceForm data={data} onClose={()=>setShowCorrespondence(false)} onSave={addCorrespondence}/>}
+  {scan&&<Scanner orders={orders} onClose={()=>setScan(false)} onRead={scannedCheckout}/>}
   {qrOrder&&<QrModal order={qrOrder} resident={data.residents.find(r=>r.id===qrOrder.residentId)} onClose={()=>setQrOrder(null)}/> }
   {notice&&<div className="toast">{notice}</div>}
  </div>
@@ -266,16 +223,6 @@ function EditNotification({order,resident,initialMessage,onClose,onSave}){
 
 function ResidentForm({resident,unit,onClose,onSave}){const [f,setF]=useState(()=>resident?{name:resident.name||"",phone:resident.phone||"",block:resident.block||"",street:resident.street||"",quadra:resident.quadra||"",apt:resident.apt||""}:{name:"",phone:"",block:unit?.block||"",street:unit?.street||"",quadra:unit?.quadra||"",apt:unit?.apt||""});return <Modal title={resident?"Editar morador":"Cadastrar morador na unidade"} onClose={onClose}><div className="form"><p className="hint">{resident?"Altere o nome ou telefone. Se necessário, também é possível corrigir os dados da unidade.":"Preencha os dados do novo morador. Para adicionar alguém a uma unidade existente, use o botão Adicionar na unidade desejada."}</p>{Object.keys(f).map(k=><label key={k}>{({name:"Nome do morador",phone:"Telefone / WhatsApp",block:"Bloco",street:"Rua",quadra:"Quadra",apt:"Apartamento"})[k]}<input value={f[k]} onChange={e=>setF({...f,[k]:e.target.value})} required={k==="name"} placeholder={({name:"Nome completo",phone:"DDD + telefone",block:"Ex.: B",street:"Ex.: Rua 02",quadra:"Ex.: Q1",apt:"Ex.: 204"})[k]}/></label>)}<button className="primary wide" onClick={()=>{if(!f.name.trim()){alert("Informe o nome do morador.");return}onSave({...f,name:f.name.trim(),phone:f.phone.trim()})}}>{resident?"Salvar alterações":"Cadastrar morador"}</button></div></Modal>}
 function CourierForm({onClose,onSave}){const [f,setF]=useState({name:"",company:"",phone:"",doc:"",plate:""});return <Modal title="Cadastrar entregador" onClose={onClose}><div className="form">{Object.keys(f).map(k=><label key={k}>{({name:"Nome",company:"Empresa",phone:"Telefone",doc:"Documento",plate:"Placa"})[k]}<input value={f[k]} onChange={e=>setF({...f,[k]:e.target.value})}/></label>)}<button className="primary wide" onClick={()=>onSave(f)}>Salvar entregador</button></div></Modal>}
-function CorrespondenceView({data,query,setQuery,onAdd,onCheckout,onDelete,onScan}){
- const items=(data.correspondences||[]).filter(x=>JSON.stringify(x).toLowerCase().includes(query.toLowerCase()));
- return <><SectionTitle icon={<Mail/>} title="Cartas e Correspondências"/><div className="correspondence-toolbar"><div className="search correspondence-search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar morador, apartamento, remetente ou rastreio..."/></div><button className="correspondence-scan" onClick={onScan}><span className="scan-icon"><ScanLine/></span><span><b>Ler código</b><small>Câmera ou leitor físico</small></span></button><button className="primary correspondence-add" onClick={onAdd}><Plus/> Nova correspondência</button></div><div className="correspondence-summary"><div className="stat"><Mail/><div><small>Aguardando retirada</small><strong>{items.filter(x=>x.status==="Aguardando retirada").length}</strong></div></div><div className="stat"><CheckCircle2/><div><small>Entregues</small><strong>{items.filter(x=>x.status==="Entregue").length}</strong></div></div></div>{items.length===0?<div className="empty">Nenhuma correspondência encontrada.</div>:<div className="cards">{items.map(item=><CorrespondenceCard key={item.id} item={item} data={data} onCheckout={onCheckout} onDelete={onDelete}/>)}</div>}</>
-}
-function CorrespondenceCard({item,data,onCheckout,onDelete}){const r=data.residents.find(x=>x.id===item.residentId);return <div className="card correspondence-card">{item.photo&&<img className="order-photo" src={item.photo} alt="Foto da correspondência" style={{width:88,height:88,objectFit:"cover",borderRadius:10,flexShrink:0}}/>}<div className="order-main"><div className="code">{item.type||"Correspondência"}</div><b>{r?.name||item.residentName||"Morador não vinculado"}</b><small>{r?`${r.block||"—"} • Apto ${r.apt||"—"}`:item.address||"Unidade não informada"}</small><small>Remetente: {item.sender||"Não informado"}</small>{item.tracking&&<small>Rastreio: {item.tracking}</small>}<small>Recebida: {new Date(item.receivedAt).toLocaleString("pt-BR")}</small><span className={item.status==="Entregue"?"badge done":"badge"}>{item.status}</span></div><div className="order-actions">{item.status==="Aguardando retirada"&&<button className="ok" title="Dar baixa" onClick={()=>onCheckout(item.id)}><CheckCircle2/></button>}<button className="danger" title="Excluir" onClick={()=>onDelete(item.id)}><Trash2/></button></div></div>}
-function CorrespondenceForm({data,onClose,onSave}){
- const [f,setF]=useState({residentId:data.residents[0]?.id||"",type:"Carta",sender:"",tracking:"",observations:""}); const [photo,setPhoto]=useState(""); const [scanCode,setScanCode]=useState(false); const r=data.residents.find(x=>x.id===f.residentId);
- async function handlePhoto(file){if(!file)return;try{const src=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)});const img=await new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=reject;im.src=src});const max=1280,scale=Math.min(1,max/Math.max(img.width,img.height));const canvas=document.createElement("canvas");canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);setPhoto(canvas.toDataURL("image/jpeg",0.72));}catch{}}
- return <Modal title="Nova correspondência" onClose={onClose}><div className="form"><p className="hint">Registre cartas, documentos, AR e outras correspondências separadamente das encomendas.</p><label>Morador<select value={f.residentId} onChange={e=>setF({...f,residentId:e.target.value})}>{data.residents.map(r=><option value={r.id} key={r.id}>{r.name} — {r.block}/{r.apt}</option>)}</select></label><label>Tipo<select value={f.type} onChange={e=>setF({...f,type:e.target.value})}><option>Carta</option><option>Documento</option><option>AR</option><option>Encomenda registrada</option><option>Cartão</option><option>Outro</option></select></label><label>Remetente<input value={f.sender} onChange={e=>setF({...f,sender:e.target.value})} placeholder="Ex.: Correios, banco, empresa..."/></label><label>Código de rastreio<div className="scan-field"><input value={f.tracking} onChange={e=>setF({...f,tracking:e.target.value})} placeholder="Pode conter letras e números"/><button type="button" onClick={()=>setScanCode(true)}><ScanLine/> Ler</button></div></label><label>Foto da correspondência<input type="file" accept="image/*" capture="environment" onChange={e=>handlePhoto(e.target.files?.[0])}/></label>{photo&&<img src={photo} alt="Prévia" style={{width:"100%",maxHeight:240,objectFit:"contain",borderRadius:10}}/>}<label>Observações<textarea value={f.observations} onChange={e=>setF({...f,observations:e.target.value})} placeholder="Informações adicionais"/></label><button className="primary wide" onClick={()=>{if(!f.residentId){alert("Cadastre um morador antes de registrar a correspondência.");return}onSave({...f,tracking:f.tracking.trim(),photo,residentName:r?.name,address:`${r?.block||""} / ${r?.apt||""}`})}}>Registrar correspondência</button></div>{scanCode&&<Scanner orders={[]} title="Ler rastreio da correspondência" receiveMode onClose={()=>setScanCode(false)} onRead={v=>{setF(prev=>({...prev,tracking:v}));setScanCode(false)}}/>}</Modal>
-}
 function Scanner({orders,onClose,onRead,title="Ler código de barras ou QR Code",receiveMode=false}){
  const [msg,setMsg]=useState(receiveMode?"Aponte a câmera para o código de barras da etiqueta.":"Escaneie o código The Door ou o rastreio da etiqueta.");
  const finished=useRef(false);
@@ -305,7 +252,7 @@ function Scanner({orders,onClose,onRead,title="Ler código de barras ou QR Code"
    else {try{reader.clear()}catch{}}
   };
  },[]);
- return <Modal title={title} onClose={onClose}><div id="qr-reader" style={{width:"100%",minHeight:180}}></div><div className="physical-scan"><label>Leitor físico USB/Bluetooth</label><input autoFocus onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();const v=e.currentTarget.value.trim();if(v){e.currentTarget.value="";onRead(v)}}}} placeholder="Aponte o leitor para o código..."/><small>Se o leitor funcionar como teclado, basta escanear aqui. Códigos com letras e números são aceitos.</small></div><p className="scanmsg">{msg}</p><p className="hint">Compatível com QR Code e formatos comuns de barras. Alguns códigos logísticos podem exigir um leitor físico compatível.</p><button type="button" onClick={onClose}>Fechar leitor</button></Modal>
+ return <Modal title={title} onClose={onClose}><div id="qr-reader" style={{width:"100%",minHeight:180}}></div><p className="scanmsg">{msg}</p><p className="hint">Compatível com QR Code e formatos comuns de barras. Alguns códigos logísticos podem exigir um leitor físico compatível.</p><button type="button" onClick={onClose}>Fechar leitor</button></Modal>
 }
 function QrModal({order,resident,onClose}){
  const [src,setSrc]=useState("");const [error,setError]=useState("");
@@ -314,23 +261,21 @@ function QrModal({order,resident,onClose}){
 }
 
 function OwnerAdmin({user,onLogout}){
- const [condos,setCondos]=useState([]),[logs,setLogs]=useState([]),[users,setUsers]=useState([]),[invites,setInvites]=useState([]);
+ const [condos,setCondos]=useState([]),[logs,setLogs]=useState([]),[users,setUsers]=useState([]);
  const [loading,setLoading]=useState(true),[error,setError]=useState(""),[editing,setEditing]=useState(null),[filter,setFilter]=useState("");
  const blank={nome:"",responsavel:"",email:"",telefone:"",endereco:"",status:"ativo",valor:"",periodo:"mensal",inicio:new Date().toISOString().slice(0,10),vencimento:"",teste:false,diasTeste:"",observacoes:""};
  const [form,setForm]=useState(blank);
  async function load(){
   setLoading(true);setError("");
   try{
-   const [c,u,l,i]=await Promise.all([
+   const [c,u,l]=await Promise.all([
     getDocs(collection(db,"condominios")),
     getDocs(collection(db,"usuarios")),
-    getDocs(query(collection(db,"admin_logs"),orderBy("createdAt","desc"),limit(20))),
-    getDocs(collection(db,"convites"))
+    getDocs(query(collection(db,"admin_logs"),orderBy("createdAt","desc"),limit(20)))
    ]);
    setCondos(c.docs.map(x=>({id:x.id,...x.data()})));
    setUsers(u.docs.map(x=>({id:x.id,...x.data()})));
    setLogs(l.docs.map(x=>({id:x.id,...x.data()})));
-   setInvites(i.docs.map(x=>({id:x.id,...x.data()})));
   }catch(e){setError("Não foi possível carregar a central. Confira as regras do Firestore. ("+(e.code||"erro")+")");}
   finally{setLoading(false)}
  }
@@ -340,24 +285,21 @@ function OwnerAdmin({user,onLogout}){
  }
  function openNew(){setEditing("new");setForm(blank)}
  function openEdit(c){setEditing(c.id);setForm({...blank,nome:c.nome||"",responsavel:c.responsavel||"",email:c.email||"",telefone:c.telefone||"",endereco:c.endereco||"",status:c.status||"ativo",valor:c.licenca?.valor??"",periodo:c.licenca?.periodo||"mensal",inicio:c.licenca?.inicio||"",vencimento:c.licenca?.vencimento||"",teste:!!c.licenca?.teste,diasTeste:c.licenca?.diasTeste||"",observacoes:c.observacoes||""})}
- async function createAccessInvite(condominioId,formData){
-  const email=String(formData.email||"").trim().toLowerCase();
-  if(!email) return;
-  const id=inviteIdForEmail(email);
-  await setDoc(doc(db,"convites",id),{email,nome:formData.responsavel||email.split("@")[0],role:"admin",status:"pendente",condominioId:String(condominioId),condominioNome:formData.nome,createdBy:user.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()},{merge:true});
-  await audit("convite_acesso_criado",condominioId,`Convite de acesso para ${email}`);
- }
  async function save(e){
   e.preventDefault();
   if(!form.nome.trim()){setError("Informe o nome do condomínio.");return}
-  if(!form.email.trim()){setError("Informe o e-mail do responsável para criar o acesso ao The Door.");return}
-  const payload={nome:form.nome.trim(),responsavel:form.responsavel.trim(),email:form.email.trim().toLowerCase(),telefone:form.telefone.trim(),endereco:form.endereco.trim(),status:form.status,observacoes:form.observacoes.trim(),licenca:{valor:Number(form.valor||0),periodo:form.periodo,inicio:form.inicio||"",vencimento:form.vencimento||"",teste:form.teste,diasTeste:Number(form.diasTeste||0),status:form.status==="suspenso"?"suspensa":(form.teste?"em_teste":(form.vencimento&&form.vencimento<new Date().toISOString().slice(0,10)?"expirada":"ativa"))},updatedAt:serverTimestamp()};
+  const email=normalizeEmail(form.email);
+  if(!email){setError("Informe o e-mail do responsável para liberar o acesso ao The Door.");return}
+  const payload={nome:form.nome.trim(),responsavel:form.responsavel.trim(),email,telefone:form.telefone.trim(),endereco:form.endereco.trim(),status:form.status,observacoes:form.observacoes.trim(),licenca:{valor:Number(form.valor||0),periodo:form.periodo,inicio:form.inicio||"",vencimento:form.vencimento||"",teste:form.teste,diasTeste:Number(form.diasTeste||0),status:form.status==="suspenso"?"suspensa":(form.teste?"em_teste":(form.vencimento&&form.vencimento<new Date().toISOString().slice(0,10)?"expirada":"ativa"))},updatedAt:serverTimestamp()};
   try{
    let condoId=editing;
    if(editing==="new"){const ref=await addDoc(collection(db,"condominios"),{...payload,criadoPor:user.uid,createdAt:serverTimestamp()});condoId=ref.id;await audit("condominio_criado",ref.id,`Cadastro de ${payload.nome}`)}
    else {await updateDoc(doc(db,"condominios",editing),payload);await audit("condominio_atualizado",editing,`Atualização de ${payload.nome}`)}
-   await createAccessInvite(condoId,payload);
+   // Convite de acesso: a responsável cria a própria senha no primeiro acesso.
+   await setDoc(doc(db,"convites",email),{email,nome:form.responsavel.trim(),condominioId:condoId,role:"admin",status:"pending",createdBy:user.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()},{merge:true});
+   await audit("convite_criado",condoId,`Acesso de ${email} vinculado ao condomínio`);
    setEditing(null);await load();
+   setError("");
   }catch(e){setError("Falha ao salvar. Verifique as regras do Firestore. ("+(e.code||"erro")+")")}
  }
  async function changeStatus(c,status){
@@ -370,39 +312,32 @@ function OwnerAdmin({user,onLogout}){
  const expired=condos.filter(c=>c.licenca?.vencimento&&c.licenca.vencimento<today).length;
  const due=condos.filter(c=>c.licenca?.vencimento&&c.licenca.vencimento>=today&&c.licenca.vencimento<=new Date(Date.now()+30*86400000).toISOString().slice(0,10)).length;
  const shown=condos.filter(c=>`${c.nome||""} ${c.responsavel||""} ${c.email||""}`.toLowerCase().includes(filter.toLowerCase()));
- function accessFor(c){
-  const email=String(c.email||"").trim().toLowerCase();
-  const u=users.find(x=>String(x.email||"").trim().toLowerCase()===email && String(x.condominioId||"")===String(c.id));
-  if(u) return {label:u.status==="active"?"Acesso ativo":"Acesso inativo",kind:u.status==="active"?"done":"",detail:u};
-  const i=invites.find(x=>String(x.email||"").trim().toLowerCase()===email && String(x.condominioId||"")===String(c.id));
-  if(i) return {label:i.status==="aceito"?"Vínculo concluído":"Convite pendente",kind:i.status==="aceito"?"done":"",detail:i};
-  return {label:email?"Aguardando vínculo":"Sem e-mail",kind:"",detail:null};
- }
- async function resendInvite(c){try{await createAccessInvite(c.id,c);await load();setError("");}catch(e){setError("Não foi possível criar o convite. ("+(e.code||"erro")+")")}}
  return <div className="app admin-app">
-  <header><div className="brand"><div className="logo"><ShieldCheck/></div><div><b>THE DOOR · ADMIN</b><small>Painel do proprietário</small></div></div><div className="header-actions"><span className="user-email">{user.email||"Proprietário"}</span><button onClick={onLogout}><LogOut/> Sair</button></div></header>
+  <header><div className="brand"><img className="brand-logo" src={brandIcon} alt="Logo The Door"/><div><b>THE DOOR · ADMIN</b><small>Painel do proprietário</small></div></div><div className="header-actions"><span className="user-email">{user.email||"Proprietário"}</span><button onClick={onLogout}><LogOut/> Sair</button></div></header>
   <main>
    <div className="hero"><div><span className="eyebrow">CENTRAL DA PLATAFORMA</span><h1>Administração The Door</h1><p>Gerencie condomínios, licenças e cobranças em um só lugar.</p></div><div className="hero-buttons"><button onClick={load}><RefreshCw/> Atualizar</button><button className="primary" onClick={openNew}><Plus/> Novo condomínio</button></div></div>
    {error&&<p className="admin-error">{error}</p>}
-   <div className="stats">
-    <Stat icon={<Building2/>} label="Condomínios cadastrados" value={condos.length}/>
-    <Stat icon={<ShieldCheck/>} label="Licenças ativas" value={active}/>
-    <Stat icon={<CalendarDays/>} label="Vencem em até 30 dias" value={due}/>
-   </div>
-   <div className="stats admin-stats-secondary">
-    <Stat icon={<Clock/>} label="Licenças vencidas" value={expired}/>
-    <Stat icon={<Users/>} label="Usuários vinculados" value={users.length}/>
-    <Stat icon={<Wallet/>} label="Receita mensal cadastrada" value={"R$ "+condos.filter(c=>c.status==="ativo").reduce((a,c)=>a+Number(c.licenca?.valor||0),0).toLocaleString("pt-BR",{minimumFractionDigits:2})}/>
-   </div>
+   <section className="admin-overview">
+    <div className="admin-section-head"><div><span className="eyebrow">VISÃO GERAL</span><h2>Operação da plataforma</h2><p>Acompanhe condomínios, licenças, acessos e receita em um único painel.</p></div></div>
+    <div className="stats admin-stats">
+     <Stat icon={<Building2/>} label="Condomínios cadastrados" value={condos.length}/>
+     <Stat icon={<ShieldCheck/>} label="Licenças ativas" value={active}/>
+     <Stat icon={<CalendarDays/>} label="Vencem em até 30 dias" value={due}/>
+     <Stat icon={<Clock/>} label="Licenças vencidas" value={expired}/>
+     <Stat icon={<Users/>} label="Usuários vinculados" value={users.length}/>
+     <Stat icon={<Wallet/>} label="Receita mensal cadastrada" value={"R$ "+condos.filter(c=>c.status==="ativo").reduce((a,c)=>a+Number(c.licenca?.valor||0),0).toLocaleString("pt-BR",{minimumFractionDigits:2})}/>
+    </div>
+   </section>
    <SectionTitle icon={<Building2/>} title="Condomínios e licenças"/>
-   <div className="toolbar"><div className="search"><Search/><input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Buscar condomínio, responsável ou e-mail..."/></div><button className="primary" onClick={openNew}><Plus/> Cadastrar</button></div>
-   {loading?<div className="empty">Carregando dados administrativos...</div>:shown.length===0?<div className="empty">Nenhum condomínio cadastrado.</div>:<div className="cards">{shown.map(c=><div className="card admin-condo" key={c.id}>
-    <div className="admin-condo-top"><div><b>{c.nome||"Condomínio sem nome"}</b><small>{c.responsavel||"Responsável não informado"} · {c.endereco||"Endereço não informado"}</small></div><div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}><span className={"badge "+(c.status==="ativo"?"done":"")}>{c.status||"sem status"}</span><span className={"badge "+accessFor(c).kind}>{accessFor(c).label}</span></div></div>
+   <div className="toolbar admin-toolbar"><div className="search"><Search/><input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Buscar condomínio, responsável ou e-mail..."/></div><button className="primary" onClick={openNew}><Plus/> Novo condomínio</button></div>
+   {!loading&&<div className="admin-list-meta"><span>{shown.length} condomínio(s) exibido(s)</span><span>{active} ativo(s) · {expired} vencido(s)</span></div>}
+   {loading?<div className="empty">Carregando dados administrativos...</div>:shown.length===0?<div className="empty">Nenhum condomínio cadastrado.</div>:<div className="cards admin-condo-list">{shown.map(c=><div className="card admin-condo" key={c.id}>
+    <div className="admin-condo-top"><div><b>{c.nome||"Condomínio sem nome"}</b><small>{c.responsavel||"Responsável não informado"} · {c.endereco||"Endereço não informado"}</small></div><span className={"badge "+(c.status==="ativo"?"done":"")}>{c.status||"sem status"}</span></div>
     <div className="admin-meta"><span>Valor: <b>R$ {Number(c.licenca?.valor||0).toLocaleString("pt-BR",{minimumFractionDigits:2})}</b></span><span>Cobrança: <b>{c.licenca?.periodo||"não definida"}</b></span><span>Vencimento: <b>{c.licenca?.vencimento?new Date(c.licenca.vencimento+"T12:00:00").toLocaleDateString("pt-BR"):"não definido"}</b></span><span>Teste: <b>{c.licenca?.teste?"Sim":"Não"}</b></span></div>
-    <div className="admin-actions"><button onClick={()=>openEdit(c)}><Pencil/> Editar / licença</button><button onClick={()=>resendInvite(c)}><Mail/> {accessFor(c).label==="Acesso ativo"?"Reenviar vínculo":"Vincular acesso"}</button>{c.status==="suspenso"?<button className="primary" onClick={()=>changeStatus(c,"ativo")}>Reativar</button>:<button className="danger-action" onClick={()=>changeStatus(c,"suspenso")}>Suspender acesso</button>}</div>
+    <div className="admin-actions"><button onClick={()=>openEdit(c)}><Pencil/> Editar / licença</button>{c.status==="suspenso"?<button className="primary" onClick={()=>changeStatus(c,"ativo")}>Reativar</button>:<button className="danger-action" onClick={()=>changeStatus(c,"suspenso")}>Suspender acesso</button>}</div>
    </div>)}</div>}
-   <SectionTitle icon={<Users/>} title="Usuários cadastrados"/>
-   <div className="card"><small>O cadastro do condomínio já cria um convite de acesso para o e-mail do responsável. Quando essa pessoa entrar no The Door com o mesmo e-mail, o sistema cria automaticamente o vínculo com o condomínio. Você não precisa criar a conta manualmente no Firebase.</small>
+   <SectionTitle icon={<Users/>} title="Acessos dos condomínios"/>
+   <div className="card"><small>Acompanhe os acessos vinculados a cada condomínio. Novos administradores recebem convite e concluem o próprio cadastro de acesso.</small>
     {users.slice(0,12).map(u=><div className="admin-user-row" key={u.id}><b>{u.nome||u.email||u.id}</b><small>{u.email||u.id} · {u.role||"usuário"} · {u.status||"sem status"} · Condomínio: {u.condominioId||"—"}</small></div>)}
    </div>
    <SectionTitle icon={<History/>} title="Registro de atividades administrativas"/>
@@ -431,7 +366,7 @@ function App(){
  const [user,setUser]=useState(null); const [checking,setChecking]=useState(true); const [profile,setProfile]=useState(null); const [profileLoading,setProfileLoading]=useState(false);
  useEffect(()=>onAuthStateChanged(auth,u=>{setUser(u);setChecking(false);setProfile(null)}),[]);
  useEffect(()=>{let live=true;if(!user){setProfile(null);return}setProfileLoading(true);getDoc(doc(db,"usuarios",user.uid)).then(s=>{if(live)setProfile(s.exists()?s.data():null)}).catch(()=>{if(live)setProfile(null)}).finally(()=>{if(live)setProfileLoading(false)});return()=>{live=false}},[user?.uid]);
- if(checking|| (user&&profileLoading)) return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="The Door"/><h1>The Door</h1><p>Verificando sua sessão...</p></div></div>;
+ if(checking|| (user&&profileLoading)) return <div className="auth-screen"><div className="auth-card"><img src={brandIcon} alt="The Door"/><h1>The Door</h1><p>Verificando sua sessão...</p></div></div>;
  if(!user) return <LoginScreen/>;
  if(profile?.role==="owner"&&profile?.status==="active")return <OwnerAdmin user={user} onLogout={()=>signOut(auth)}/>;
  return <AppContent user={user} onLogout={()=>signOut(auth)}/>;
@@ -444,11 +379,11 @@ function LoginScreen(){
   const ios=/(iPhone|iPad|iPod)/i.test(ua);
   setEmbedded(inApp && ios);
  },[]);
- async function run(action){setBusy(true);setError("");try{await action()}catch(e){const map={"auth/invalid-credential":"E-mail ou senha incorretos.","auth/user-not-found":"Conta não encontrada.","auth/wrong-password":"E-mail ou senha incorretos.","auth/email-already-in-use":"Este e-mail já possui cadastro.","auth/weak-password":"A senha deve ter pelo menos 6 caracteres.","auth/popup-closed-by-user":"A janela de login foi fechada.","auth/popup-blocked":"O navegador bloqueou a janela de login. Abra o The Door no Safari ou Chrome e tente novamente.","auth/web-storage-unsupported":"O navegador não permitiu o armazenamento necessário para o login. Abra o The Door no Safari ou Chrome.","auth/unauthorized-domain":"Este domínio não está autorizado no Firebase.","auth/operation-not-allowed":"Ative este método de login no Firebase Authentication."};setError(map[e.code]||`Não foi possível entrar. (${e.code||"erro"})`)}finally{setBusy(false)}}
+ async function run(action){setBusy(true);setError("");try{await action()}catch(e){const map={"auth/invalid-credential":"E-mail ou senha incorretos.","auth/user-not-found":"Conta não encontrada.","auth/wrong-password":"E-mail ou senha incorretos.","auth/email-already-in-use":"Este e-mail já possui cadastro.","auth/weak-password":"A senha deve ter pelo menos 6 caracteres.","auth/popup-closed-by-user":"A janela de login foi fechada.","auth/popup-blocked":"O navegador bloqueou a janela de login. Abra o The Door no Safari ou Chrome e tente novamente.","auth/web-storage-unsupported":"O navegador não permitiu o armazenamento necessário para o login. Abra o The Door no Safari ou Chrome.","auth/unauthorized-domain":"Este domínio não está autorizado no Firebase.","auth/operation-not-allowed":"Ative este método de login no Firebase Authentication.","invite-required":"Este e-mail ainda não foi liberado pelo administrador do The Door. Peça o convite ao proprietário.","invite-invalid":"Este convite não está mais válido. Peça um novo convite ao proprietário."};setError(map[e.code]||`Não foi possível entrar. (${e.code||"erro"})`)}finally{setBusy(false)}}
  function openExternal(){
   try{window.open(window.location.href,"_blank","noopener,noreferrer");}catch{}
   setError("Se esta tela continuar no WhatsApp, toque em ⋯ e escolha “Abrir no navegador” ou copie o endereço e abra no Safari.");
  }
- return <div className="auth-screen"><div className="auth-card"><img src="./the-door-icon.png" alt="Logo The Door"/><div className="auth-eyebrow">LOGÍSTICA DE ENCOMENDAS</div><h1>Bem-vindo ao The Door</h1><p className="auth-subtitle">Entre para acessar a gestão de encomendas do seu condomínio.</p>{embedded&&<div className="auth-browser-warning" role="alert"><strong>Abra o The Door no Safari</strong><span>O navegador do WhatsApp pode bloquear o login do Google. Toque em <b>⋯</b> e escolha <b>“Abrir no navegador”</b>.</span><button type="button" className="secondary wide" onClick={openExternal}>Tentar abrir no navegador</button></div>}<button className="google-button" disabled={busy||embedded} onClick={()=>run(()=>signInWithPopup(auth,new GoogleAuthProvider()))}><span className="google-g">G</span> Continuar com Google</button><div className="auth-separator"><span>ou use seu e-mail</span></div><form className="auth-form" onSubmit={e=>{e.preventDefault();run(()=>mode==="register"?createUserWithEmailAndPassword(auth,email,password):signInWithEmailAndPassword(auth,email,password))}}><label>E-mail<input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="voce@exemplo.com"/></label><label>Senha<input type="password" autoComplete={mode==="register"?"new-password":"current-password"} value={password} onChange={e=>setPassword(e.target.value)} required minLength={6} placeholder="Mínimo de 6 caracteres"/></label>{error&&<p className="auth-error" role="alert">{error}</p>}<button className="primary wide" disabled={busy}>{busy?"Aguarde...":mode==="register"?"Criar conta":"Entrar"}</button></form><button className="auth-switch" onClick={()=>{setMode(mode==="register"?"login":"register");setError("")}}>{mode==="register"?"Já tem uma conta? Entrar":"Primeiro acesso? Criar conta com e-mail"}</button><p className="auth-footnote">Os dados do condomínio são sincronizados pela nuvem. O acesso precisa ser liberado pelo administrador do The Door.</p></div></div>
+ return <div className="auth-screen"><div className="auth-card"><img src={brandIcon} alt="Logo The Door"/><div className="auth-eyebrow">LOGÍSTICA DE ENCOMENDAS</div><h1>Bem-vindo ao The Door</h1><p className="auth-subtitle">Entre para acessar a gestão de encomendas do seu condomínio.</p>{embedded&&<div className="auth-browser-warning" role="alert"><strong>Abra o The Door no Safari</strong><span>O navegador do WhatsApp pode bloquear o login do Google. Toque em <b>⋯</b> e escolha <b>“Abrir no navegador”</b>.</span><button type="button" className="secondary wide" onClick={openExternal}>Tentar abrir no navegador</button></div>}<button className="google-button" disabled={busy||embedded} onClick={()=>run(()=>signInWithPopup(auth,new GoogleAuthProvider()))}><span className="google-g">G</span> Continuar com Google</button><div className="auth-separator"><span>ou use seu e-mail</span></div><form className="auth-form" onSubmit={e=>{e.preventDefault();run(async()=>{if(mode!=="register"){await signInWithEmailAndPassword(auth,normalizeEmail(email),password);return}const credential=await createUserWithEmailAndPassword(auth,normalizeEmail(email),password);const inviteSnap=await getDoc(doc(db,"convites",normalizeEmail(email)));if(!inviteSnap.exists()){await credential.user.delete();const err=new Error("invite-required");err.code="invite-required";throw err}const invite=inviteSnap.data();if(invite.status!=="pending"||normalizeEmail(invite.email)!==normalizeEmail(email)){await credential.user.delete();const err=new Error("invite-invalid");err.code="invite-invalid";throw err}await setDoc(doc(db,"usuarios",credential.user.uid),{nome:invite.nome||credential.user.displayName||"",email:normalizeEmail(email),role:invite.role||"admin",status:"active",condominioId:String(invite.condominioId),createdAt:serverTimestamp()});})}}><label>E-mail<input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="voce@exemplo.com"/></label><label>Senha<input type="password" autoComplete={mode==="register"?"new-password":"current-password"} value={password} onChange={e=>setPassword(e.target.value)} required minLength={6} placeholder="Mínimo de 6 caracteres"/></label>{error&&<p className="auth-error" role="alert">{error}</p>}<button className="primary wide" disabled={busy}>{busy?"Aguarde...":mode==="register"?"Criar conta":"Entrar"}</button></form><button className="auth-switch" onClick={()=>{setMode(mode==="register"?"login":"register");setError("")}}>{mode==="register"?"Já tem uma conta? Entrar":"Primeiro acesso? Criar conta com e-mail"}</button><p className="auth-footnote">Os dados do condomínio são sincronizados pela nuvem. O acesso precisa ser liberado pelo administrador do The Door.</p></div></div>
 }
 createRoot(document.getElementById("root")).render(<App/>);
