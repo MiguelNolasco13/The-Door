@@ -123,3 +123,232 @@
 .order-select{display:flex;align-items:center;justify-content:center;flex:0 0 34px;margin-right:4px}.order-select input{width:20px;height:20px;accent-color:var(--gold)}
 .selected-order{border-color:var(--gold)!important;box-shadow:0 0 0 1px #dcae4a33}
 @media(max-width:700px){.bulk-bar{display:block}.bulk-actions{margin-top:10px;display:grid;grid-template-columns:1fr 1fr}.bulk-actions .primary{grid-column:1/-1;width:100%}.order-select{position:absolute;left:8px;top:12px}.order.selected-order,.order{position:relative}.order-select+img{margin-left:28px}}
+
+/* =========================================================
+   THE DOOR — SISTEMA UNIFICADO DE BOTÕES v1
+   Refinamento visual aplicado a todas as ações do aplicativo.
+   ========================================================= */
+:root{
+  --btn-radius:13px;
+  --btn-height:46px;
+  --btn-gold-border:rgba(240,201,108,.62);
+  --btn-dark:#28231c;
+  --btn-dark-hover:#352d22;
+}
+
+/* Base de todos os botões */
+button{
+  min-height:var(--btn-height);
+  border-radius:var(--btn-radius);
+  font-weight:700;
+  letter-spacing:.05px;
+  border:1px solid transparent;
+  transition:transform .16s ease, background .16s ease, border-color .16s ease,
+    box-shadow .16s ease, color .16s ease, opacity .16s ease;
+}
+button:hover:not(:disabled){
+  transform:translateY(-1px);
+}
+button:active:not(:disabled){
+  transform:translateY(0) scale(.985);
+}
+button:focus-visible{
+  outline:2px solid var(--gold2);
+  outline-offset:2px;
+}
+button:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+  transform:none!important;
+}
+
+/* Ação principal — dourado premium */
+button.primary,
+.primary{
+  min-height:48px;
+  padding:0 18px;
+  border:1px solid rgba(255,239,183,.38);
+  border-radius:14px;
+  background:linear-gradient(135deg,#f5d477 0%,#e7b942 52%,#d49d2f 100%);
+  color:#241a0c;
+  box-shadow:0 7px 18px rgba(215,168,62,.18), inset 0 1px rgba(255,255,255,.34);
+}
+button.primary:hover:not(:disabled),
+.primary:hover:not(:disabled){
+  background:linear-gradient(135deg,#ffe08a 0%,#f0c64f 52%,#dca83a 100%);
+  box-shadow:0 9px 22px rgba(215,168,62,.25), inset 0 1px rgba(255,255,255,.42);
+}
+
+/* Ações secundárias */
+button:not(.primary):not(.google-button):not(.auth-switch):not(.modalhead button):not(.side-menu-head button):not(.icon-menu-btn):not(nav button){
+  min-height:44px;
+  padding:0 15px;
+  background:linear-gradient(145deg,var(--btn-dark),#211d18);
+  color:#eee4d3;
+  border:1px solid rgba(105,83,56,.78);
+  border-radius:12px;
+  box-shadow:inset 0 1px rgba(255,255,255,.035);
+}
+button:not(.primary):not(.google-button):not(.auth-switch):not(.modalhead button):not(.side-menu-head button):not(.icon-menu-btn):not(nav button):hover:not(:disabled){
+  background:linear-gradient(145deg,var(--btn-dark-hover),#29231b);
+  border-color:var(--btn-gold-border);
+  color:#fff4dd;
+}
+
+/* Botões de ação por grupo */
+.order-actions button,
+.notification-actions button,
+.admin-actions button,
+.unit-add,
+.edit-resident,
+.scan-field button{
+  min-height:42px;
+  border-radius:11px;
+  padding:0 13px;
+  background:linear-gradient(145deg,#302a21,#24201b);
+  color:#eadfcd;
+  border:1px solid #5b4a35;
+}
+.order-actions button:hover,
+.notification-actions button:hover,
+.admin-actions button:hover,
+.unit-add:hover,
+.edit-resident:hover,
+.scan-field button:hover{
+  border-color:var(--btn-gold-border);
+  background:#372e23;
+  color:#fff2d3;
+}
+
+/* Ícones de ação: quadrados, compactos e consistentes */
+.order-actions button{
+  width:44px;
+  min-width:44px;
+  padding:0;
+  display:grid;
+  place-items:center;
+}
+.order-actions button svg{width:18px;height:18px}
+.order-actions button.ok{color:#b2dfbc;border-color:#466b52}
+.order-actions button.ok:hover{background:#263b2d;border-color:#679875}
+.order-actions button.danger{color:#f1aaa0;border-color:#70453e}
+.order-actions button.danger:hover{background:#3e2724;border-color:#a25d53}
+
+/* Ações de texto com destaque */
+.notification-actions,
+.admin-actions{gap:9px}
+.notification-actions button,
+.admin-actions button{display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.notification-actions .primary,
+.admin-actions .primary{border-color:rgba(255,239,183,.38)}
+.admin-actions .danger-action{background:#3b2522!important;color:#ffb7ad!important;border-color:#754137!important}
+.admin-actions .danger-action:hover{background:#492b27!important;border-color:#a45c51!important}
+
+/* Botão de seleção/limpeza da baixa em lote */
+.bulk-actions button{
+  min-height:46px;
+  border-radius:12px;
+}
+.bulk-actions button:not(.primary){
+  background:#29251f;
+  border-color:#5b4c39;
+}
+.bulk-actions button:not(.primary):hover{
+  border-color:var(--btn-gold-border);
+}
+.bulk-actions .primary{
+  min-height:48px;
+}
+
+/* Botões dos formulários */
+.form .wide,
+.modal .wide,
+.auth-form .wide{
+  min-height:48px;
+  border-radius:13px;
+  margin-top:7px;
+}
+
+/* Fechar modal não deve parecer botão de ação */
+.modalhead button,
+.side-menu-head button{
+  min-height:38px;
+  width:38px;
+  padding:0;
+  display:grid;
+  place-items:center;
+  border-radius:10px;
+  background:transparent!important;
+  border:1px solid transparent!important;
+  color:var(--muted);
+}
+.modalhead button:hover,
+.side-menu-head button:hover{
+  color:var(--gold2);
+  background:#2b251d!important;
+  border-color:#4c3d2c!important;
+}
+
+/* Menu lateral */
+.side-menu>button{
+  min-height:48px;
+  border-radius:13px;
+  padding:0 14px;
+  background:linear-gradient(145deg,#242019,#1e1b17);
+  border:1px solid rgba(255,255,255,.08);
+}
+.side-menu>button:hover{
+  background:#2e281f;
+  border-color:var(--btn-gold-border);
+  transform:translateX(-2px);
+}
+
+/* Cabeçalho */
+.header-actions button{
+  min-height:44px;
+  border-radius:12px;
+  padding:0 14px;
+}
+.header-actions .icon-menu-btn{
+  width:46px;
+  min-width:46px;
+  padding:0;
+  justify-content:center;
+  background:#2b251c!important;
+  border:1px solid #5a4629!important;
+}
+
+/* Login */
+.google-button{
+  min-height:48px;
+  border-radius:13px;
+}
+.auth-switch{min-height:40px}
+
+/* Botões da navegação inferior permanecem minimalistas */
+nav button{
+  min-height:62px;
+  border-radius:0;
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  transform:none!important;
+  color:#9f9482;
+}
+nav button:hover:not(:disabled){
+  color:#dfd1bb;
+  background:rgba(255,255,255,.025)!important;
+}
+nav button.active{
+  color:var(--gold2);
+}
+
+/* Mobile: botões mais confortáveis para toque */
+@media(max-width:700px){
+  button.primary,
+  .primary{min-height:50px;padding:0 16px}
+  .toolbar .primary{min-height:48px}
+  .bulk-actions button{min-height:48px}
+  .order-actions button{min-height:44px}
+  .header-actions button{min-height:44px}
+}
