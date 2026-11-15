@@ -17,10 +17,26 @@ CADASTRO E LICENÇA
   do condomínio se estiver suspenso, inativo ou vencido.
 - O histórico de alterações administrativas é gravado em admin_logs.
 
-LIMITAÇÕES DESTA PRIMEIRA ENTREGA
-- O painel lista os perfis da coleção usuarios, mas não cria contas no Firebase
-  Authentication. Criar usuários de forma segura exige convite/provisionamento
-  no servidor ou no Console do Firebase.
+ACESSO DO RESPONSÁVEL — NOVO FLUXO
+- Ao cadastrar ou editar um condomínio, o e-mail do responsável passa a gerar
+  automaticamente um convite na coleção convites.
+- O documento do convite usa o e-mail normalizado como ID e contém o
+  condominioId, nome, papel e status do convite.
+- A Central mostra o estado do acesso: Acesso ativo, Convite pendente,
+  Aguardando vínculo ou Sem e-mail.
+- O botão "Vincular acesso" pode criar ou reenviar o convite sem apagar o
+  condomínio e sem criar senha manualmente.
+- Quando o responsável entra no The Door com o mesmo e-mail do convite, o
+  próprio primeiro acesso cria usuarios/{UID} com status active, role admin e
+  condominioId do convite.
+- O usuário não pode escolher o próprio condominioId. As regras do Firestore
+  só permitem essa criação quando existe convite válido para o mesmo e-mail.
+- Depois do vínculo, a Central passa a mostrar "Acesso ativo".
+
+LIMITAÇÕES
+- A criação da conta no Firebase Authentication continua sendo feita pelo
+  próprio usuário no primeiro acesso ou pelo provedor Google. A Central não
+  cria senhas nem troca a sessão do proprietário.
 - Pagamentos são apenas valores/condições cadastrados; não há baixa de Pix,
   cartão ou conciliação financeira automática.
 - Os lembretes de vencimento ainda não são enviados automaticamente.

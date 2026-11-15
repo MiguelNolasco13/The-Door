@@ -25,6 +25,7 @@ function load(userId){
  }catch{return initial}
 }
 function uid(p="id"){return p+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,7)}
+function inviteIdForEmail(email){return String(email||"").trim().toLowerCase()}
 // WhatsApp gratuito: abre uma conversa com texto preenchido; o usuário confirma o envio.
 function phoneForWhatsApp(phone){
  let n=String(phone||"").replace(/\D/g,"");
@@ -58,8 +59,25 @@ function AppContent({user,onLogout}){
    try{
     const profileSnap=await getDoc(doc(db,"usuarios",user.uid));
     if(!active)return;
-    if(!profileSnap.exists()) {setCloudError("Seu usuário ainda não foi vinculado a um condomínio. Peça ao administrador do The Door para concluir seu cadastro.");return;}
-    const profile=profileSnap.data();
+    if(!profileSnap.exists()) {
+     const email=String(user.email||"").trim().toLowerCase();
+     if(email){
+      try{
+       const inviteSnap=await getDoc(doc(db,"convites",inviteIdForEmail(email)));
+       if(inviteSnap.exists()){
+        const invite=inviteSnap.data();
+        if(String(invite.email||"").trim().toLowerCase()===email && invite.status!=="cancelado" && invite.condominioId){
+         await setDoc(doc(db,"usuarios",user.uid),{nome:invite.nome||user.displayName||email.split("@")[0],email,role:invite.role||"admin",status:"active",condominioId:String(invite.condominioId),createdAt:serverTimestamp(),provisionadoPorConvite:true},{merge:true});
+         const fresh=await getDoc(doc(db,"usuarios",user.uid));
+         if(fresh.exists()){setCloudError("");}
+         else {setCloudError("Não foi possível concluir o vínculo do usuário.");return;}
+        }else{setCloudError("Seu convite de acesso está inválido ou cancelado. Peça ao administrador do The Door para reenviar o acesso.");return;}
+       }else{setCloudError("Seu usuário ainda não foi vinculado a um condomínio. Peça ao administrador do The Door para concluir seu cadastro.");return;}
+      }catch(e){setCloudError(e.code==="permission-denied"?"O convite existe, mas as regras do Firestore ainda não permitem concluir o vínculo. Publique as novas regras do The Door.":"Não foi possível concluir o vínculo do usuário.");return;}
+     }
+     else {setCloudError("Sua conta não possui e-mail. Não foi possível localizar o convite de acesso.");return;}
+    }
+    const profile= (await getDoc(doc(db,"usuarios",user.uid))).data();
     if(profile.status!=="active"||!profile.condominioId){setCloudError("Seu acesso está inativo ou ainda não foi vinculado a um condomínio. Entre em contato com o administrador.");return;}
     const cid=String(profile.condominioId); setTenantId(cid);
     const condoSnap=await getDoc(doc(db,"condominios",cid));
@@ -296,21 +314,23 @@ function QrModal({order,resident,onClose}){
 }
 
 function OwnerAdmin({user,onLogout}){
- const [condos,setCondos]=useState([]),[logs,setLogs]=useState([]),[users,setUsers]=useState([]);
+ const [condos,setCondos]=useState([]),[logs,setLogs]=useState([]),[users,setUsers]=useState([]),[invites,setInvites]=useState([]);
  const [loading,setLoading]=useState(true),[error,setError]=useState(""),[editing,setEditing]=useState(null),[filter,setFilter]=useState("");
  const blank={nome:"",responsavel:"",email:"",telefone:"",endereco:"",status:"ativo",valor:"",periodo:"mensal",inicio:new Date().toISOString().slice(0,10),vencimento:"",teste:false,diasTeste:"",observacoes:""};
  const [form,setForm]=useState(blank);
  async function load(){
   setLoading(true);setError("");
   try{
-   const [c,u,l]=await Promise.all([
+   const [c,u,l,i]=await Promise.all([
     getDocs(collection(db,"condominios")),
     getDocs(collection(db,"usuarios")),
-    getDocs(query(collection(db,"admin_logs"),orderBy("createdAt","desc"),limit(20)))
+    getDocs(query(collection(db,"admin_logs"),orderBy("createdAt","desc"),limit(20))),
+    getDocs(collection(db,"convites"))
    ]);
    setCondos(c.docs.map(x=>({id:x.id,...x.data()})));
    setUsers(u.docs.map(x=>({id:x.id,...x.data()})));
    setLogs(l.docs.map(x=>({id:x.id,...x.data()})));
+   setInvites(i.docs.map(x=>({id:x.id,...x.data()})));
   }catch(e){setError("Não foi possível carregar a central. Confira as regras do Firestore. ("+(e.code||"erro")+")");}
   finally{setLoading(false)}
  }
@@ -320,13 +340,23 @@ function OwnerAdmin({user,onLogout}){
  }
  function openNew(){setEditing("new");setForm(blank)}
  function openEdit(c){setEditing(c.id);setForm({...blank,nome:c.nome||"",responsavel:c.responsavel||"",email:c.email||"",telefone:c.telefone||"",endereco:c.endereco||"",status:c.status||"ativo",valor:c.licenca?.valor??"",periodo:c.licenca?.periodo||"mensal",inicio:c.licenca?.inicio||"",vencimento:c.licenca?.vencimento||"",teste:!!c.licenca?.teste,diasTeste:c.licenca?.diasTeste||"",observacoes:c.observacoes||""})}
+ async function createAccessInvite(condominioId,formData){
+  const email=String(formData.email||"").trim().toLowerCase();
+  if(!email) return;
+  const id=inviteIdForEmail(email);
+  await setDoc(doc(db,"convites",id),{email,nome:formData.responsavel||email.split("@")[0],role:"admin",status:"pendente",condominioId:String(condominioId),condominioNome:formData.nome,createdBy:user.uid,createdAt:serverTimestamp(),updatedAt:serverTimestamp()},{merge:true});
+  await audit("convite_acesso_criado",condominioId,`Convite de acesso para ${email}`);
+ }
  async function save(e){
   e.preventDefault();
   if(!form.nome.trim()){setError("Informe o nome do condomínio.");return}
-  const payload={nome:form.nome.trim(),responsavel:form.responsavel.trim(),email:form.email.trim(),telefone:form.telefone.trim(),endereco:form.endereco.trim(),status:form.status,observacoes:form.observacoes.trim(),licenca:{valor:Number(form.valor||0),periodo:form.periodo,inicio:form.inicio||"",vencimento:form.vencimento||"",teste:form.teste,diasTeste:Number(form.diasTeste||0),status:form.status==="suspenso"?"suspensa":(form.teste?"em_teste":(form.vencimento&&form.vencimento<new Date().toISOString().slice(0,10)?"expirada":"ativa"))},updatedAt:serverTimestamp()};
+  if(!form.email.trim()){setError("Informe o e-mail do responsável para criar o acesso ao The Door.");return}
+  const payload={nome:form.nome.trim(),responsavel:form.responsavel.trim(),email:form.email.trim().toLowerCase(),telefone:form.telefone.trim(),endereco:form.endereco.trim(),status:form.status,observacoes:form.observacoes.trim(),licenca:{valor:Number(form.valor||0),periodo:form.periodo,inicio:form.inicio||"",vencimento:form.vencimento||"",teste:form.teste,diasTeste:Number(form.diasTeste||0),status:form.status==="suspenso"?"suspensa":(form.teste?"em_teste":(form.vencimento&&form.vencimento<new Date().toISOString().slice(0,10)?"expirada":"ativa"))},updatedAt:serverTimestamp()};
   try{
-   if(editing==="new"){const ref=await addDoc(collection(db,"condominios"),{...payload,criadoPor:user.uid,createdAt:serverTimestamp()});await audit("condominio_criado",ref.id,`Cadastro de ${payload.nome}`)}
+   let condoId=editing;
+   if(editing==="new"){const ref=await addDoc(collection(db,"condominios"),{...payload,criadoPor:user.uid,createdAt:serverTimestamp()});condoId=ref.id;await audit("condominio_criado",ref.id,`Cadastro de ${payload.nome}`)}
    else {await updateDoc(doc(db,"condominios",editing),payload);await audit("condominio_atualizado",editing,`Atualização de ${payload.nome}`)}
+   await createAccessInvite(condoId,payload);
    setEditing(null);await load();
   }catch(e){setError("Falha ao salvar. Verifique as regras do Firestore. ("+(e.code||"erro")+")")}
  }
@@ -340,6 +370,15 @@ function OwnerAdmin({user,onLogout}){
  const expired=condos.filter(c=>c.licenca?.vencimento&&c.licenca.vencimento<today).length;
  const due=condos.filter(c=>c.licenca?.vencimento&&c.licenca.vencimento>=today&&c.licenca.vencimento<=new Date(Date.now()+30*86400000).toISOString().slice(0,10)).length;
  const shown=condos.filter(c=>`${c.nome||""} ${c.responsavel||""} ${c.email||""}`.toLowerCase().includes(filter.toLowerCase()));
+ function accessFor(c){
+  const email=String(c.email||"").trim().toLowerCase();
+  const u=users.find(x=>String(x.email||"").trim().toLowerCase()===email && String(x.condominioId||"")===String(c.id));
+  if(u) return {label:u.status==="active"?"Acesso ativo":"Acesso inativo",kind:u.status==="active"?"done":"",detail:u};
+  const i=invites.find(x=>String(x.email||"").trim().toLowerCase()===email && String(x.condominioId||"")===String(c.id));
+  if(i) return {label:i.status==="aceito"?"Vínculo concluído":"Convite pendente",kind:i.status==="aceito"?"done":"",detail:i};
+  return {label:email?"Aguardando vínculo":"Sem e-mail",kind:"",detail:null};
+ }
+ async function resendInvite(c){try{await createAccessInvite(c.id,c);await load();setError("");}catch(e){setError("Não foi possível criar o convite. ("+(e.code||"erro")+")")}}
  return <div className="app admin-app">
   <header><div className="brand"><div className="logo"><ShieldCheck/></div><div><b>THE DOOR · ADMIN</b><small>Painel do proprietário</small></div></div><div className="header-actions"><span className="user-email">{user.email||"Proprietário"}</span><button onClick={onLogout}><LogOut/> Sair</button></div></header>
   <main>
@@ -358,12 +397,12 @@ function OwnerAdmin({user,onLogout}){
    <SectionTitle icon={<Building2/>} title="Condomínios e licenças"/>
    <div className="toolbar"><div className="search"><Search/><input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Buscar condomínio, responsável ou e-mail..."/></div><button className="primary" onClick={openNew}><Plus/> Cadastrar</button></div>
    {loading?<div className="empty">Carregando dados administrativos...</div>:shown.length===0?<div className="empty">Nenhum condomínio cadastrado.</div>:<div className="cards">{shown.map(c=><div className="card admin-condo" key={c.id}>
-    <div className="admin-condo-top"><div><b>{c.nome||"Condomínio sem nome"}</b><small>{c.responsavel||"Responsável não informado"} · {c.endereco||"Endereço não informado"}</small></div><span className={"badge "+(c.status==="ativo"?"done":"")}>{c.status||"sem status"}</span></div>
+    <div className="admin-condo-top"><div><b>{c.nome||"Condomínio sem nome"}</b><small>{c.responsavel||"Responsável não informado"} · {c.endereco||"Endereço não informado"}</small></div><div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}><span className={"badge "+(c.status==="ativo"?"done":"")}>{c.status||"sem status"}</span><span className={"badge "+accessFor(c).kind}>{accessFor(c).label}</span></div></div>
     <div className="admin-meta"><span>Valor: <b>R$ {Number(c.licenca?.valor||0).toLocaleString("pt-BR",{minimumFractionDigits:2})}</b></span><span>Cobrança: <b>{c.licenca?.periodo||"não definida"}</b></span><span>Vencimento: <b>{c.licenca?.vencimento?new Date(c.licenca.vencimento+"T12:00:00").toLocaleDateString("pt-BR"):"não definido"}</b></span><span>Teste: <b>{c.licenca?.teste?"Sim":"Não"}</b></span></div>
-    <div className="admin-actions"><button onClick={()=>openEdit(c)}><Pencil/> Editar / licença</button>{c.status==="suspenso"?<button className="primary" onClick={()=>changeStatus(c,"ativo")}>Reativar</button>:<button className="danger-action" onClick={()=>changeStatus(c,"suspenso")}>Suspender acesso</button>}</div>
+    <div className="admin-actions"><button onClick={()=>openEdit(c)}><Pencil/> Editar / licença</button><button onClick={()=>resendInvite(c)}><Mail/> {accessFor(c).label==="Acesso ativo"?"Reenviar vínculo":"Vincular acesso"}</button>{c.status==="suspenso"?<button className="primary" onClick={()=>changeStatus(c,"ativo")}>Reativar</button>:<button className="danger-action" onClick={()=>changeStatus(c,"suspenso")}>Suspender acesso</button>}</div>
    </div>)}</div>}
    <SectionTitle icon={<Users/>} title="Usuários cadastrados"/>
-   <div className="card"><small>O painel lista os perfis existentes no Firestore. A criação de contas de acesso deve ser feita por convite ou provisionamento seguro no Firebase Authentication; não é realizada diretamente pelo navegador do proprietário.</small>
+   <div className="card"><small>O cadastro do condomínio já cria um convite de acesso para o e-mail do responsável. Quando essa pessoa entrar no The Door com o mesmo e-mail, o sistema cria automaticamente o vínculo com o condomínio. Você não precisa criar a conta manualmente no Firebase.</small>
     {users.slice(0,12).map(u=><div className="admin-user-row" key={u.id}><b>{u.nome||u.email||u.id}</b><small>{u.email||u.id} · {u.role||"usuário"} · {u.status||"sem status"} · Condomínio: {u.condominioId||"—"}</small></div>)}
    </div>
    <SectionTitle icon={<History/>} title="Registro de atividades administrativas"/>

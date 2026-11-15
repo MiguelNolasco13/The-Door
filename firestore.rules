@@ -21,8 +21,27 @@ service cloud.firestore {
     match /usuarios/{userId} {
       allow get: if signedIn() && (request.auth.uid == userId || isOwner());
       allow list: if isOwner();
-      // Perfis e vínculos são provisionados pelo proprietário no Console do Firebase.
-      allow create, update, delete: if false;
+      // O proprietário administra os perfis existentes. Um usuário também pode
+      // criar o próprio perfil somente quando houver um convite válido para o
+      // mesmo e-mail e condomínio. O cliente não pode escolher livremente o tenant.
+      allow create: if isOwner()
+        || (signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.email == request.auth.token.email
+          && request.resource.data.status == "active"
+          && exists(/databases/$(database)/documents/convites/$(request.auth.token.email))
+          && get(/databases/$(database)/documents/convites/$(request.auth.token.email)).data.email == request.auth.token.email
+          && get(/databases/$(database)/documents/convites/$(request.auth.token.email)).data.condominioId == request.resource.data.condominioId
+          && get(/databases/$(database)/documents/convites/$(request.auth.token.email)).data.status != "cancelado");
+      allow update, delete: if isOwner() || (signedIn() && request.auth.uid == userId && request.resource.data.condominioId == resource.data.condominioId);
+    }
+
+    match /convites/{inviteId} {
+      allow get: if isOwner()
+        || (signedIn() && resource.data.email == request.auth.token.email);
+      allow list: if isOwner();
+      allow create, update: if isOwner();
+      allow delete: if isOwner();
     }
 
     match /condominios/{condominioId} {
