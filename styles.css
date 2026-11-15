@@ -98,3 +98,20 @@
  .admin-list-meta{display:block}
  .admin-list-meta span{display:block;margin-bottom:4px}
 }
+
+/* Navegação refinada: 4 áreas principais + menu */
+.bottom-nav{grid-template-columns:repeat(4,1fr)!important}
+.bottom-nav button{min-width:0}
+.bottom-nav button span{font-size:12px}
+.icon-menu-btn{display:none!important}
+.menu-overlay{position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:80;display:flex;justify-content:flex-end}
+.side-menu{width:min(360px,88vw);height:100%;background:#171511;border-left:1px solid rgba(240,190,76,.28);padding:22px 18px;box-shadow:-18px 0 45px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:8px}
+.side-menu-head{display:flex;align-items:center;justify-content:space-between;padding:8px 4px 18px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:8px}
+.side-menu-head b{display:block;font-size:22px;color:#fff}
+.side-menu-head small{display:block;color:#c9c1b5;margin-top:3px}
+.side-menu-head button{background:transparent;border:0;color:#fff;padding:8px}
+.side-menu>button{display:flex;align-items:center;gap:12px;width:100%;padding:15px 14px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:#211f1a;color:#f4f0e8;font-size:16px;text-align:left}
+.side-menu>button svg{color:#f0c34f}
+.side-menu .menu-divider{height:1px;background:rgba(255,255,255,.1);margin:10px 0}
+@media (min-width:760px){.icon-menu-btn{display:inline-flex!important}}
+@media (max-width:759px){.header-actions .user-email{display:none}.header-actions .icon-menu-btn{display:inline-flex!important}.header-actions button{padding:10px 13px}.bottom-nav{display:grid!important}}
