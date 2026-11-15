@@ -48,7 +48,7 @@ function openWhatsAppChat(phone,message){
 }
 function AppContent({user,onLogout}){
  const [data,setData]=useState(initial); const [tab,setTab]=useState("home"); const [query,setQuery]=useState("");
- const [showAdd,setShowAdd]=useState(false); const [showCorrespondence,setShowCorrespondence]=useState(false); const [menuOpen,setMenuOpen]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null);
+ const [showAdd,setShowAdd]=useState(false); const [showCorrespondence,setShowCorrespondence]=useState(false); const [menuOpen,setMenuOpen]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null); const [pickupReceiptOrders,setPickupReceiptOrders]=useState([]);
  const [notice,setNotice]=useState(""); const [editingNotification,setEditingNotification]=useState(null); const [selectedOrderIds,setSelectedOrderIds]=useState([]);
  const [tenantId,setTenantId]=useState(""); const [tenantName,setTenantName]=useState(""); const [cloudReady,setCloudReady]=useState(false); const [cloudError,setCloudError]=useState("");
  const lastCloudJson=useRef(""); const applyingCloud=useRef(false);
@@ -152,8 +152,10 @@ function AppContent({user,onLogout}){
   if(!unique.length){notify("Selecione pelo menos uma encomenda pendente.");return}
   if(!confirm(`Confirmar a retirada de ${unique.length} encomenda(s) selecionada(s)?`))return;
   const now=new Date().toISOString();
+  const pickedOrders=unique.map(id=>orders.find(o=>o.id===id)).filter(Boolean).map(o=>({...o,status:"Retirada",pickedAt:now,pickupMethod:"manual",notificationStatus:o.notificationStatus}));
   setData(d=>({...d,orders:d.orders.map(o=>unique.includes(o.id)?{...o,status:"Retirada",pickedAt:now,pickupMethod:"manual",notificationStatus:o.notificationStatus}:o)}));
   setSelectedOrderIds([]);
+  setPickupReceiptOrders(pickedOrders);
   notify(`${unique.length} encomenda(s) marcada(s) como retirada.`);
  }
  function notificationGroups(){
@@ -185,30 +187,23 @@ function AppContent({user,onLogout}){
   if(!o)return;
   const picked={...o,status:"Retirada",pickedAt:new Date().toISOString(),pickupMethod:"manual"};
   setData(d=>({...d,orders:d.orders.map(x=>x.id===id?picked:x)}));
-  const r=data.residents.find(x=>x.id===o.residentId);
-  if(!r){notify(o.notificationStatus!=="sent"?"Retirada registrada. O aviso pendente foi removido da fila; não há morador vinculado para a confirmação.":"Retirada registrada. Não há morador vinculado para enviar a confirmação.");return}
-  const msg=`Olá, ${r.name}! Confirmamos que sua encomenda ${o.code} foi retirada na portaria. Obrigado!`;
-  if(!phoneForWhatsApp(r.phone)||phoneForWhatsApp(r.phone).length<12){notify("Retirada registrada. O aviso pendente foi removido da fila. Confira o telefone do morador com DDD.");return}
-  if(openWhatsAppChat(r.phone,msg))notify("Retirada registrada. O aviso pendente saiu da fila. Confira a conversa do WhatsApp e toque em Enviar.");
-  else notify("Retirada registrada. O aviso pendente saiu da fila. Use a confirmação pelo WhatsApp no Histórico.");
+  setPickupReceiptOrders([picked]);
+  notify("Retirada registrada. Comprovante pronto para compartilhar com o morador.");
  }
  function scannedCheckout(value){
   const clean=value.trim();
   const o=orders.find(x=>x.status==="Pendente"&&(String(x.code).toLowerCase()===clean.toLowerCase()||String(x.tracking||"").toLowerCase()===clean.toLowerCase()));
   if(!o){notify("Código não encontrado entre as encomendas pendentes.");return}
   const method=String(o.code).toLowerCase()===clean.toLowerCase()?"QR Code":"código de barras";
-  setData(d=>({...d,orders:d.orders.map(x=>x.id===o.id?{...x,status:"Retirada",pickedAt:new Date().toISOString(),pickupMethod:method}:x)}));
+  const picked={...o,status:"Retirada",pickedAt:new Date().toISOString(),pickupMethod:method};
+  setData(d=>({...d,orders:d.orders.map(x=>x.id===o.id?picked:x)}));
   setScan(false);setQrOrder(null);
-  const r=data.residents.find(x=>x.id===o.residentId);
-  if(!r){notify(o.notificationStatus!=="sent"?"Retirada registrada. O aviso pendente foi removido da fila; morador não vinculado para confirmação.":"Retirada registrada, mas não há morador vinculado para enviar a confirmação.");return}
-  const msg=`Olá, ${r.name}! Confirmamos que sua encomenda ${o.code} foi retirada na portaria por ${method==="QR Code"?"meio do QR Code":"meio do código de barras"}. Obrigado!`;
-  if(!phoneForWhatsApp(r.phone)||phoneForWhatsApp(r.phone).length<12){notify("Retirada registrada. O aviso pendente foi removido da fila. Confira o telefone do morador com DDD.");return}
-  if(openWhatsAppChat(r.phone,msg)) notify("Retirada registrada. O aviso pendente saiu da fila. Confira a conversa do WhatsApp e toque em Enviar.");
-  else notify("Retirada registrada. O aviso pendente saiu da fila. Use a confirmação pelo WhatsApp no Histórico.");
+  setPickupReceiptOrders([picked]);
+  notify("Retirada registrada. Comprovante pronto para compartilhar com o morador.");
  }
  function openWhatsApp(phone,msg){if(!whatsappUrl(phone,msg)){notify("Confira o telefone do morador com DDD e código do país antes de enviar pelo WhatsApp.");return}if(!openWhatsAppChat(phone,msg))notify("O navegador bloqueou a nova janela. Permita pop-ups para o The Door e tente novamente.")}
   function sendWhatsApp(o){const r=data.residents.find(x=>x.id===o.residentId);if(!r){notify("Cadastre ou vincule um morador para enviar a mensagem.");return}const msg=`Olá, ${r.name}! Sua encomenda ${o.code} está disponível para retirada na portaria. Apresente o QR Code desta encomenda ou informe o código ${o.tracking||o.code} ao atendente. Obrigado!`;openWhatsApp(r.phone,msg)}
-  function sendPickupConfirmation(o,method){const r=data.residents.find(x=>x.id===o.residentId);if(!r){notify("Retirada registrada, mas não foi possível enviar a mensagem: morador sem telefone vinculado.");return}const msg=`Olá, ${r.name}! Confirmamos que sua encomenda ${o.code} foi retirada na portaria por ${method==="QR Code"?"meio do QR Code":"meio do código de barras"}. Obrigado!`;openWhatsApp(r.phone,msg)}
+  function sendPickupConfirmation(o,method){setPickupReceiptOrders([{...o,pickupMethod:method||o.pickupMethod||"manual"}]);}
  function addCorrespondence(c){const resident=data.residents.find(x=>x.id===c.residentId);const item={...c,id:uid("cor"),status:"Aguardando",receivedAt:new Date().toISOString(),residentName:resident?.name||"",address:resident?`${resident.block||""} / ${resident.apt||""}`:""};setData(d=>({...d,correspondences:[item,...d.correspondences]}));setShowCorrespondence(false);notify("Correspondência cadastrada com sucesso.")}
  function deliverCorrespondence(id){setData(d=>({...d,correspondences:d.correspondences.map(c=>c.id===id?{...c,status:"Entregue",deliveredAt:new Date().toISOString()}:c)}));notify("Correspondência marcada como entregue.")}
  function removeCorrespondence(id){if(confirm("Excluir esta correspondência?"))setData(d=>({...d,correspondences:d.correspondences.filter(c=>c.id!==id)}))}
@@ -234,6 +229,7 @@ function AppContent({user,onLogout}){
   {showCourier&&<CourierForm onClose={()=>setShowCourier(false)} onSave={c=>{setData(d=>({...d,couriers:[...d.couriers,{...c,id:uid("ent")}] }));setShowCourier(false)}}/>}
   {scan&&<Scanner orders={orders} onClose={()=>setScan(false)} onRead={scannedCheckout}/>}
   {qrOrder&&<QrModal order={qrOrder} resident={data.residents.find(r=>r.id===qrOrder.residentId)} onClose={()=>setQrOrder(null)}/> }
+  {pickupReceiptOrders.length>0&&<PickupReceiptModal orders={pickupReceiptOrders} residents={data.residents} onClose={()=>setPickupReceiptOrders([])}/> }
   {notice&&<div className="toast">{notice}</div>}
  </div>
 }
@@ -296,6 +292,54 @@ function Scanner({orders,onClose,onRead,title="Ler código de barras ou QR Code"
  },[]);
  return <Modal title={title} onClose={onClose}><div id="qr-reader" style={{width:"100%",minHeight:180}}></div><p className="scanmsg">{msg}</p><p className="hint">Compatível com QR Code e formatos comuns de barras. Alguns códigos logísticos podem exigir um leitor físico compatível.</p><button type="button" onClick={onClose}>Fechar leitor</button></Modal>
 }
+function PickupReceiptModal({orders,residents,onClose}){
+ const [qrMap,setQrMap]=useState({});
+ useEffect(()=>{
+  let alive=true;
+  Promise.all(orders.map(async o=>[o.id,await QRCode.toDataURL(o.code,{width:360,margin:2,errorCorrectionLevel:"M"})])).then(entries=>{if(alive)setQrMap(Object.fromEntries(entries))}).catch(()=>{});
+  return()=>{alive=false};
+ },[orders]);
+ const captionFor=o=>{
+  const r=residents.find(x=>x.id===o.residentId);
+  const name=r?.name||o.residentName||"morador";
+  return `Olá, ${name}! Informamos que a encomenda ${o.code} foi retirada na portaria e está sendo encaminhada ao morador. Este é o comprovante de retirada da encomenda. Obrigado!`;
+ };
+ const shareOne=async o=>{
+  const src=qrMap[o.id]; if(!src)return;
+  const caption=captionFor(o);
+  try{
+   const blob=await (await fetch(src)).blob();
+   const file=new File([blob],`The-Door-Comprovante-${o.code}.png`,{type:"image/png"});
+   if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:`Comprovante de retirada - ${o.code}`,text:caption});return;}
+  }catch(e){}
+  const r=residents.find(x=>x.id===o.residentId);
+  const url=whatsappUrl(r?.phone,caption);
+  if(url)window.open(url,"_blank");
+  else window.open("https://wa.me/?text="+encodeURIComponent(caption),"_blank");
+ };
+ const print=()=>{
+  const blocks=orders.map(o=>{const r=residents.find(x=>x.id===o.residentId);const src=qrMap[o.id]||"";return `<section style="page-break-after:always;text-align:center;font-family:Arial,sans-serif;padding:30px"><h1 style="margin:0 0 8px">THE DOOR</h1><h2>Comprovante de retirada</h2><img src="${src}" style="width:280px;height:280px"/><h3>${o.code}</h3><p style="font-size:16px">${r?.name||o.residentName||"Morador"}</p><p>${r?`Bloco ${r.block||"—"} • Apto ${r.apt||"—"}`:o.address||""}</p><p style="max-width:520px;margin:20px auto;line-height:1.5">${captionFor(o)}</p><small>Retirada em ${o.pickedAt?new Date(o.pickedAt).toLocaleString("pt-BR"):new Date().toLocaleString("pt-BR")}</small></section>`}).join("");
+  const w=window.open("","_blank"); if(!w)return; w.document.write(`<html><head><title>Comprovante The Door</title></head><body>${blocks}</body></html>`);w.document.close();w.focus();setTimeout(()=>w.print(),300);
+ };
+ return <Modal title={orders.length>1?"Comprovantes de retirada":"Comprovante de retirada"} onClose={onClose}>
+  <div className="pickup-receipts">
+   {orders.map(o=>{const r=residents.find(x=>x.id===o.residentId);return <div className="pickup-receipt" key={o.id}>
+    <div className="pickup-receipt-brand"><img src={brandIcon} alt="The Door"/><div><b>THE DOOR</b><small>Comprovante de retirada</small></div></div>
+    <div className="pickup-status"><CheckCircle2/> Retirada registrada</div>
+    {qrMap[o.id]?<img className="pickup-qr" src={qrMap[o.id]} alt={`QR Code ${o.code}`}/>:<div className="pickup-qr-loading">Gerando QR Code...</div>}
+    <strong className="pickup-code">{o.code}</strong>
+    <p className="pickup-resident">{r?.name||o.residentName||"Morador"}</p>
+    <p className="pickup-unit">{r?`Bloco ${r.block||"—"} • Apto ${r.apt||"—"}`:o.address||"Unidade não informada"}</p>
+    {o.tracking&&<p className="pickup-tracking">Rastreio: {o.tracking}</p>}
+    <div className="pickup-caption">{captionFor(o)}</div>
+    <small className="pickup-date">Retirada em {o.pickedAt?new Date(o.pickedAt).toLocaleString("pt-BR"):new Date().toLocaleString("pt-BR")}</small>
+    <div className="pickup-actions"><button className="primary wide" onClick={()=>shareOne(o)}><Send/> Compartilhar comprovante</button><button className="wide" onClick={()=>{const r=residents.find(x=>x.id===o.residentId);const url=whatsappUrl(r?.phone,captionFor(o));if(url)window.open(url,"_blank");else window.open("https://wa.me/?text="+encodeURIComponent(captionFor(o)),"_blank")}}><MessageSquare/> Enviar legenda pelo WhatsApp</button></div>
+   </div>})}
+   <button className="wide receipt-print" onClick={print}>Imprimir comprovante{orders.length>1?"s":""}</button>
+  </div>
+ </Modal>;
+}
+
 function QrModal({order,resident,onClose}){
  const [src,setSrc]=useState("");const [error,setError]=useState("");
  useEffect(()=>{let alive=true;QRCode.toDataURL(order.code,{width:320,margin:2,errorCorrectionLevel:"M"}).then(url=>{if(alive)setSrc(url)}).catch(()=>setError("Não foi possível gerar o QR Code."));return()=>{alive=false}},[order.code]);
