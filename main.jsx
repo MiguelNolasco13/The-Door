@@ -14,16 +14,6 @@ const initial={residents:[],couriers:[],orders:[],correspondences:[]};
 function stripPhotos(value){return {residents:value.residents||[],couriers:value.couriers||[],orders:(value.orders||[]).map(({photo,...order})=>order),correspondences:value.correspondences||[]};}
 function mergeLocalPhotos(cloud,current){const photos=new Map((current.orders||[]).filter(o=>o.photo).map(o=>[o.id,o.photo]));return {...cloud,orders:(cloud.orders||[]).map(o=>photos.has(o.id)?{...o,photo:photos.get(o.id)}:o),correspondences:Array.isArray(cloud.correspondences)?cloud.correspondences:[]};}
 
-function load(userId){
- try{
-  const own=localStorage.getItem(KEY_PREFIX+userId);
-  if(own) return JSON.parse(own)||initial;
-  // Migra os dados antigos deste navegador para a primeira conta que entrar.
-  const legacy=localStorage.getItem("the-door-v1");
-  if(legacy){localStorage.setItem(KEY_PREFIX+userId,legacy);localStorage.removeItem("the-door-v1");return JSON.parse(legacy)||initial;}
-  return initial;
- }catch{return initial}
-}
 function uid(p="id"){return p+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,7)}
 function normalizeEmail(email){return String(email||"").trim().toLowerCase()}
 // Integração preparada para leitura inteligente de etiquetas.
@@ -192,6 +182,21 @@ function openWhatsAppChat(phone,message){
  if(!win) return false;
  return true;
 }
+async function provisionInvitedUser(firebaseUser){
+ const email=normalizeEmail(firebaseUser?.email);
+ if(!email)return false;
+ const profileRef=doc(db,"usuarios",firebaseUser.uid);
+ const profileSnap=await getDoc(profileRef);
+ if(profileSnap.exists())return true;
+ const inviteSnap=await getDoc(doc(db,"convites",email));
+ if(!inviteSnap.exists())return false;
+ const invite=inviteSnap.data();
+ if(invite.status!=="pending"||normalizeEmail(invite.email)!==email||!invite.condominioId)return false;
+ await setDoc(profileRef,{nome:invite.nome||firebaseUser.displayName||"",email,role:invite.role||"admin",status:"active",condominioId:String(invite.condominioId),createdAt:serverTimestamp()});
+ try{await updateDoc(doc(db,"convites",email),{status:"accepted",acceptedAt:serverTimestamp()});}catch{}
+ return true;
+}
+
 function AppContent({user,onLogout}){
  const [data,setData]=useState(initial); const [tab,setTab]=useState("home"); const [query,setQuery]=useState("");
  const [showAdd,setShowAdd]=useState(false); const [showCorrespondence,setShowCorrespondence]=useState(false); const [menuOpen,setMenuOpen]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null); const [pickupReceiptOrders,setPickupReceiptOrders]=useState([]);
@@ -415,30 +420,58 @@ function AddOrder({data,onClose,onSave}){
  const [readBarcode,setReadBarcode]=useState(false); const [photo,setPhoto]=useState(""); const [photoError,setPhotoError]=useState("");
  const [aiState,setAiState]=useState("idle"); const [aiResult,setAiResult]=useState(null);
  const r=data.residents.find(x=>x.id===f.residentId);
- async function handlePhoto(file){setPhotoError("");setAiResult(null);setAiState("idle");if(!file)return;try{const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)});const img=await new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=dataUrl});const max=1280;const scale=Math.min(1,max/Math.max(img.width,img.height));const canvas=document.createElement("canvas");canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);setPhoto(canvas.toDataURL("image/jpeg",0.72));}catch{setPhotoError("Não foi possível carregar a foto. Tente novamente.")}}
- async function runAI(){
-  if(!photo){alert("Tire ou selecione a foto da etiqueta primeiro.");return}
+ async function analyzeAndFill(image){
   setAiState("loading");
   try{
-   const result=await analyzeLabelWithAI(photo);
+   const result=await analyzeLabelWithAI(image);
    const rawText=String(result?.ocrText||"");
    const unit=extractUnitFromText(rawText);
-   const match=findResidentFromLabel(data.residents,rawText);
+   // A IA pode retornar o nome do destinatário mesmo quando o OCR local não conseguiu ler bem o texto.
+   const aiName=String(result?.recipientName||result?.recipient||result?.name||"").trim();
+   const combinedText=[rawText,aiName,result?.block||"",result?.apt||""].filter(Boolean).join(" ");
+   let match=findResidentFromLabel(data.residents,combinedText);
+   // Se a IA informou unidade, ela tem prioridade para localizar o morador cadastrado.
+   const resolvedBlock=String(result?.block||unit.block||match?.resident?.block||"").trim();
+   const resolvedApt=String(result?.apt||unit.apt||match?.resident?.apt||"").trim();
+   if((resolvedBlock||resolvedApt) && !match){
+    const byUnit=(data.residents||[]).find(r=>
+      (!resolvedBlock||normalizeOCRText(r.block)===normalizeOCRText(resolvedBlock)) &&
+      (!resolvedApt||normalizeOCRText(r.apt)===normalizeOCRText(resolvedApt))
+    );
+    if(byUnit)match={resident:byUnit,score:0.9};
+   }
    const matched=match?.resident||null;
-   const resolvedBlock=result?.block||unit.block||matched?.block||"";
-   const resolvedApt=result?.apt||unit.apt||matched?.apt||"";
-   const owner=data.residents.find(x=>x.block===resolvedBlock&&x.apt===resolvedApt&&String(x.relationship||"").toLowerCase()==="proprietário".toLowerCase());
-   const enriched={...(result||{}),block:resolvedBlock,apt:resolvedApt,recipientName:result?.recipientName||matched?.name||"",matchedResidentId:matched?.id||"",matchScore:match?.score||0,matchedResidentName:matched?.name||"",ownerName:owner?.name||""};
+   const finalBlock=matched?.block||resolvedBlock;
+   const finalApt=matched?.apt||resolvedApt;
+   const owner=data.residents.find(x=>normalizeOCRText(x.block)===normalizeOCRText(finalBlock)&&normalizeOCRText(x.apt)===normalizeOCRText(finalApt)&&normalizeOCRText(x.relationship)==="PROPRIETARIO");
+   const enriched={...(result||{}),block:finalBlock,apt:finalApt,recipientName:aiName||matched?.name||"",matchedResidentId:matched?.id||"",matchScore:match?.score||0,matchedResidentName:matched?.name||"",ownerName:owner?.name||"",mode:result?.mode||"ai"};
    setAiResult(enriched);
    setF(prev=>{
     const next={...prev};
     if(enriched.tracking)next.tracking=String(enriched.tracking);
     if(enriched.carrier)next.courier=String(enriched.carrier);
-    if(match?.resident?.id)next.residentId=match.resident.id;
+    if(matched?.id)next.residentId=matched.id;
+    if(enriched.description)next.description=String(enriched.description);
     return next;
    });
    setAiState("done");
   }catch(e){setAiState("error")}
+ }
+ async function handlePhoto(file){
+  setPhotoError("");setAiResult(null);setAiState("idle");if(!file)return;
+  try{
+   const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)});
+   const img=await new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=dataUrl});
+   const max=1280;const scale=Math.min(1,max/Math.max(img.width,img.height));
+   const canvas=document.createElement("canvas");canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
+   const optimized=canvas.toDataURL("image/jpeg",0.72);setPhoto(optimized);
+   // Assim que a foto chega, a leitura é iniciada automaticamente.
+   await analyzeAndFill(optimized);
+  }catch{setPhotoError("Não foi possível carregar ou analisar a foto. Tente novamente.");setAiState("error")}
+ }
+ async function runAI(){
+  if(!photo){alert("Tire ou selecione a foto da etiqueta primeiro.");return}
+  await analyzeAndFill(photo);
  }
  return <Modal title="Nova encomenda" onClose={onClose}><div className="form">
  <label>Morador<select value={f.residentId} onChange={e=>setF({...f,residentId:e.target.value})}>{data.residents.map(r=><option value={r.id} key={r.id}>{r.name} — {r.block}/{r.apt}</option>)}</select></label>
@@ -446,7 +479,7 @@ function AddOrder({data,onClose,onSave}){
  <label>Código de barras / rastreio<div className="scan-field"><input value={f.tracking} onChange={e=>setF({...f,tracking:e.target.value})} placeholder="Use Ler para escanear ou digite"/><button type="button" onClick={()=>setReadBarcode(true)}><ScanLine/> Escanear</button></div><small className="hint">Ao tocar em Escanear, a câmera deve ler o código de barras da etiqueta e preencher este campo automaticamente.</small></label>
  <label>Descrição<input value={f.description} onChange={e=>setF({...f,description:e.target.value})} placeholder="Caixa, envelope, mercado..."/></label>
  <label>Foto da encomenda / etiqueta<input type="file" accept="image/*" capture="environment" onChange={e=>handlePhoto(e.target.files?.[0])}/></label>
- {photo&&<div className="ai-label-panel"><img src={photo} alt="Prévia da etiqueta"/><div className="ai-label-actions"><button type="button" className="ai-button" onClick={runAI} disabled={aiState==="loading"}><ShieldCheck/> {aiState==="loading"?"Lendo etiqueta...":"Ler etiqueta com IA"}</button><span className="ai-label-status">{aiState==="not-configured"?"Leitura inteligente disponível.":aiState==="done"?(aiResult?.mode==="ocr-local"?"Leitura local concluída. Confira os dados antes de salvar.":"Etiqueta analisada. Confira os dados antes de salvar."):aiState==="error"?"Não foi possível analisar a etiqueta. Tente novamente.":"A leitura inteligente identifica rastreio, transportadora, destinatário e unidade a partir da foto. Confira antes de salvar."}</span></div>{aiResult&&<div className="ai-label-result"><b>Leitura inteligente</b>{aiResult.tracking&&<small>Rastreio: <strong>{aiResult.tracking}</strong></small>}{aiResult.carrier&&<small>Transportadora: <strong>{aiResult.carrier}</strong></small>}{aiResult.matchedResidentName?<small>Destinatário encontrado: <strong>{aiResult.matchedResidentName}</strong></small>:aiResult.recipientName?<small>Nome identificado: <strong>{aiResult.recipientName}</strong></small>:null}{aiResult.matchedResidentId&&<small>Unidade preenchida: <strong>{aiResult.block||"—"} • Apto {aiResult.apt||"—"}</strong></small>}{aiResult.block&&!aiResult.matchedResidentId&&<small>Bloco identificado: <strong>{aiResult.block}</strong></small>}{aiResult.apt&&!aiResult.matchedResidentId&&<small>Apartamento identificado: <strong>{aiResult.apt}</strong></small>}{aiResult.matchedResidentId&&<small>Proprietário da unidade: <strong>{aiResult.ownerName||"não localizado no cadastro"}</strong></small>}{aiResult.confidence!=null&&<small>Confiança do OCR: {Math.round(Number(aiResult.confidence)*100)}%</small>}{aiResult.ocrText&&<details><summary>Texto identificado</summary><small>{aiResult.ocrText}</small></details>}</div>}</div>}
+ {photo&&<div className="ai-label-panel"><img src={photo} alt="Prévia da etiqueta"/><div className="ai-label-actions"><button type="button" className="ai-button" onClick={runAI} disabled={aiState==="loading"}><ShieldCheck/> {aiState==="loading"?"Lendo etiqueta...":"Ler etiqueta com IA"}</button><span className="ai-label-status">{aiState==="loading"?"A IA está lendo a etiqueta e procurando o morador no cadastro...":aiState==="done"?(aiResult?.mode?.startsWith("ocr-local")?"Leitura local concluída. Confira os dados antes de salvar.":"IA analisou a etiqueta e preencheu os dados encontrados."):aiState==="error"?"Não foi possível analisar a etiqueta. Tente novamente.":"Ao tirar a foto, a IA analisa automaticamente a etiqueta e procura o morador cadastrado."}</span></div>{aiResult&&<div className="ai-label-result"><b>Leitura inteligente</b>{aiResult.tracking&&<small>Rastreio: <strong>{aiResult.tracking}</strong></small>}{aiResult.carrier&&<small>Transportadora: <strong>{aiResult.carrier}</strong></small>}{aiResult.matchedResidentName?<small>Destinatário encontrado: <strong>{aiResult.matchedResidentName}</strong></small>:aiResult.recipientName?<small>Nome identificado: <strong>{aiResult.recipientName}</strong></small>:null}{aiResult.matchedResidentId&&<small>Unidade preenchida: <strong>{aiResult.block||"—"} • Apto {aiResult.apt||"—"}</strong></small>}{aiResult.block&&!aiResult.matchedResidentId&&<small>Bloco identificado: <strong>{aiResult.block}</strong></small>}{aiResult.apt&&!aiResult.matchedResidentId&&<small>Apartamento identificado: <strong>{aiResult.apt}</strong></small>}{aiResult.matchedResidentId&&<small>Proprietário da unidade: <strong>{aiResult.ownerName||"não localizado no cadastro"}</strong></small>}{aiResult.confidence!=null&&<small>Confiança do OCR: {Math.round(Number(aiResult.confidence)*100)}%</small>}{aiResult.ocrText&&<details><summary>Texto identificado</summary><small>{aiResult.ocrText}</small></details>}</div>}</div>}
  {photoError&&<p className="hint">{photoError}</p>}
  <label>Observações<textarea value={f.observations} onChange={e=>setF({...f,observations:e.target.value})}/></label>
  <label>Mensagem para o morador<textarea value={f.messageTemplate} onChange={e=>setF({...f,messageTemplate:e.target.value})} rows={5} placeholder="Escreva o aviso que será enviado pelo WhatsApp"/></label>
@@ -682,6 +715,6 @@ function LoginScreen(){
   try{window.open(window.location.href,"_blank","noopener,noreferrer");}catch{}
   setError("Se esta tela continuar no WhatsApp, toque em ⋯ e escolha “Abrir no navegador” ou copie o endereço e abra no Safari.");
  }
- return <div className="auth-screen"><div className="auth-card"><img src={brandIcon} alt="Logo The Door"/><div className="auth-eyebrow">LOGÍSTICA DE ENCOMENDAS</div><h1>Bem-vindo ao The Door</h1><p className="auth-subtitle">Entre para acessar a gestão de encomendas do seu condomínio.</p>{embedded&&<div className="auth-browser-warning" role="alert"><strong>Abra o The Door no Safari</strong><span>O navegador do WhatsApp pode bloquear o login do Google. Toque em <b>⋯</b> e escolha <b>“Abrir no navegador”</b>.</span><button type="button" className="secondary wide" onClick={openExternal}>Tentar abrir no navegador</button></div>}<button className="google-button" disabled={busy||embedded} onClick={()=>run(()=>signInWithPopup(auth,new GoogleAuthProvider()))}><span className="google-g">G</span> Continuar com Google</button><div className="auth-separator"><span>ou use seu e-mail</span></div><form className="auth-form" onSubmit={e=>{e.preventDefault();run(async()=>{if(mode!=="register"){await signInWithEmailAndPassword(auth,normalizeEmail(email),password);return}const credential=await createUserWithEmailAndPassword(auth,normalizeEmail(email),password);const inviteSnap=await getDoc(doc(db,"convites",normalizeEmail(email)));if(!inviteSnap.exists()){await credential.user.delete();const err=new Error("invite-required");err.code="invite-required";throw err}const invite=inviteSnap.data();if(invite.status!=="pending"||normalizeEmail(invite.email)!==normalizeEmail(email)){await credential.user.delete();const err=new Error("invite-invalid");err.code="invite-invalid";throw err}await setDoc(doc(db,"usuarios",credential.user.uid),{nome:invite.nome||credential.user.displayName||"",email:normalizeEmail(email),role:invite.role||"admin",status:"active",condominioId:String(invite.condominioId),createdAt:serverTimestamp()});})}}><label>E-mail<input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="voce@exemplo.com"/></label><label>Senha<input type="password" autoComplete={mode==="register"?"new-password":"current-password"} value={password} onChange={e=>setPassword(e.target.value)} required minLength={6} placeholder="Mínimo de 6 caracteres"/></label>{error&&<p className="auth-error" role="alert">{error}</p>}<button className="primary wide" disabled={busy}>{busy?"Aguarde...":mode==="register"?"Criar conta":"Entrar"}</button></form><button className="auth-switch" onClick={()=>{setMode(mode==="register"?"login":"register");setError("")}}>{mode==="register"?"Já tem uma conta? Entrar":"Primeiro acesso? Criar conta com e-mail"}</button><p className="auth-footnote">Os dados do condomínio são sincronizados pela nuvem. O acesso precisa ser liberado pelo administrador do The Door.</p></div></div>
+ return <div className="auth-screen"><div className="auth-card"><img src={brandIcon} alt="Logo The Door"/><div className="auth-eyebrow">LOGÍSTICA DE ENCOMENDAS</div><h1>Bem-vindo ao The Door</h1><p className="auth-subtitle">Entre para acessar a gestão de encomendas do seu condomínio.</p>{embedded&&<div className="auth-browser-warning" role="alert"><strong>Abra o The Door no Safari</strong><span>O navegador do WhatsApp pode bloquear o login do Google. Toque em <b>⋯</b> e escolha <b>“Abrir no navegador”</b>.</span><button type="button" className="secondary wide" onClick={openExternal}>Tentar abrir no navegador</button></div>}<button className="google-button" disabled={busy||embedded} onClick={()=>run(async()=>{const result=await signInWithPopup(auth,new GoogleAuthProvider());const provisioned=await provisionInvitedUser(result.user);if(!provisioned){await signOut(auth);const err=new Error("invite-required");err.code="invite-required";throw err}})}><span className="google-g">G</span> Continuar com Google</button><div className="auth-separator"><span>ou use seu e-mail</span></div><form className="auth-form" onSubmit={e=>{e.preventDefault();run(async()=>{if(mode!=="register"){await signInWithEmailAndPassword(auth,normalizeEmail(email),password);return}const credential=await createUserWithEmailAndPassword(auth,normalizeEmail(email),password);const provisioned=await provisionInvitedUser(credential.user);if(!provisioned){await credential.user.delete();const err=new Error("invite-required");err.code="invite-required";throw err}})}}><label>E-mail<input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="voce@exemplo.com"/></label><label>Senha<input type="password" autoComplete={mode==="register"?"new-password":"current-password"} value={password} onChange={e=>setPassword(e.target.value)} required minLength={6} placeholder="Mínimo de 6 caracteres"/></label>{error&&<p className="auth-error" role="alert">{error}</p>}<button className="primary wide" disabled={busy}>{busy?"Aguarde...":mode==="register"?"Criar conta":"Entrar"}</button></form><button className="auth-switch" onClick={()=>{setMode(mode==="register"?"login":"register");setError("")}}>{mode==="register"?"Já tem uma conta? Entrar":"Primeiro acesso? Criar conta com e-mail"}</button><p className="auth-footnote">Os dados do condomínio são sincronizados pela nuvem. O acesso precisa ser liberado pelo administrador do The Door.</p></div></div>
 }
 createRoot(document.getElementById("root")).render(<App/>);
