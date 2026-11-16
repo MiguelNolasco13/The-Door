@@ -53,8 +53,11 @@ function extractTracking(text){
  const candidates=clean.match(/\b[A-Z]{2}\d{8,12}[A-Z]{2}\b/g)||[];
  return candidates.sort((a,b)=>b.length-a.length)[0]||"";
 }
+function normalizeOCRText(value){
+ return String(value||"").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Z0-9 ]/g," ").replace(/\s+/g," ").trim();
+}
 function detectCarrier(text){
- const t=String(text||"").toLowerCase();
+ const t=normalizeOCRText(text).toLowerCase();
  const carriers=[
   ["Correios",["correios","sedex","pac"]],["Mercado Livre",["mercado livre","mercadolivre","meli"]],
   ["Shopee",["shopee"]],["Amazon",["amazon"]],["Shein",["shein"]],["TikTok Shop",["tiktok shop","tiktok"]],
@@ -62,6 +65,35 @@ function detectCarrier(text){
   ["J&T Express",["j&t","j&t express"]]
  ];
  return carriers.find(([name,terms])=>terms.some(term=>t.includes(term)))?.[0]||"";
+}
+function extractUnitFromText(text){
+ const t=normalizeOCRText(text);
+ const blockMatch=t.match(/\b(?:BLOCO|BL|BLOCK)\s*[:#.-]?\s*([A-Z0-9]{1,6})\b/);
+ const aptMatch=t.match(/\b(?:APTO|APT|APARTAMENTO|AP|UNIDADE|UNID)\s*[:#.-]?\s*([A-Z0-9]{1,8})\b/);
+ const block=blockMatch?.[1]||"";
+ const apt=aptMatch?.[1]||"";
+ return {block,apt};
+}
+function scoreResidentAgainstLabel(resident,text){
+ const t=normalizeOCRText(text);
+ const name=normalizeOCRText(resident?.name);
+ if(!name)return 0;
+ let score=0;
+ if(t.includes(name)) score+=0.72;
+ const tokens=name.split(" " ).filter(x=>x.length>=3);
+ if(tokens.length){
+  const hits=tokens.filter(token=>t.includes(token)).length/tokens.length;
+  score+=Math.min(.45,hits*.15);
+ }
+ const unit=extractUnitFromText(text);
+ if(unit.block && normalizeOCRText(resident.block)===unit.block)score+=.16;
+ if(unit.apt && normalizeOCRText(resident.apt)===unit.apt)score+=.20;
+ return Math.min(1,score);
+}
+function findResidentFromLabel(residents,text){
+ const ranked=(residents||[]).map(r=>({resident:r,score:scoreResidentAgainstLabel(r,text)})).sort((a,b)=>b.score-a.score);
+ const best=ranked[0];
+ return best&&best.score>=0.48?best:null;
 }
 async function analyzeLabelWithAI(image){
  if(AI_LABEL_ENDPOINT){
@@ -76,7 +108,8 @@ async function analyzeLabelWithAI(image){
   const result=await worker.recognize(image);
   const text=result?.data?.text||"";
   const confidence=Number(result?.data?.confidence||0)/100;
-  return {tracking:extractTracking(text),carrier:detectCarrier(text),ocrText:text,confidence,mode:"ocr-local"};
+  const unit=extractUnitFromText(text);
+  return {tracking:extractTracking(text),carrier:detectCarrier(text),recipientName:"",block:unit.block,apt:unit.apt,ocrText:text,confidence,mode:"ocr-local"};
  }finally{try{await worker.terminate()}catch{}}
 }
 // WhatsApp gratuito: abre uma conversa com texto preenchido; o usuário confirma o envio.
@@ -328,9 +361,22 @@ function AddOrder({data,onClose,onSave}){
   setAiState("loading");
   try{
    const result=await analyzeLabelWithAI(photo);
-   setAiResult(result||{});
-   if(result?.tracking)setF(prev=>({...prev,tracking:String(result.tracking)}));
-   if(result?.carrier)setF(prev=>({...prev,courier:String(result.carrier)}));
+   const rawText=String(result?.ocrText||"");
+   const unit=extractUnitFromText(rawText);
+   const match=findResidentFromLabel(data.residents,rawText);
+   const matched=match?.resident||null;
+   const resolvedBlock=result?.block||unit.block||matched?.block||"";
+   const resolvedApt=result?.apt||unit.apt||matched?.apt||"";
+   const owner=data.residents.find(x=>x.block===resolvedBlock&&x.apt===resolvedApt&&String(x.relationship||"").toLowerCase()==="proprietário".toLowerCase());
+   const enriched={...(result||{}),block:resolvedBlock,apt:resolvedApt,recipientName:result?.recipientName||matched?.name||"",matchedResidentId:matched?.id||"",matchScore:match?.score||0,matchedResidentName:matched?.name||"",ownerName:owner?.name||""};
+   setAiResult(enriched);
+   setF(prev=>{
+    const next={...prev};
+    if(enriched.tracking)next.tracking=String(enriched.tracking);
+    if(enriched.carrier)next.courier=String(enriched.carrier);
+    if(match?.resident?.id)next.residentId=match.resident.id;
+    return next;
+   });
    setAiState("done");
   }catch(e){setAiState("error")}
  }
@@ -340,7 +386,7 @@ function AddOrder({data,onClose,onSave}){
  <label>Código de barras / rastreio<div className="scan-field"><input value={f.tracking} onChange={e=>setF({...f,tracking:e.target.value})} placeholder="Use Ler para escanear ou digite"/><button type="button" onClick={()=>setReadBarcode(true)}><ScanLine/> Escanear</button></div><small className="hint">Ao tocar em Escanear, a câmera deve ler o código de barras da etiqueta e preencher este campo automaticamente.</small></label>
  <label>Descrição<input value={f.description} onChange={e=>setF({...f,description:e.target.value})} placeholder="Caixa, envelope, mercado..."/></label>
  <label>Foto da encomenda / etiqueta<input type="file" accept="image/*" capture="environment" onChange={e=>handlePhoto(e.target.files?.[0])}/></label>
- {photo&&<div className="ai-label-panel"><img src={photo} alt="Prévia da etiqueta"/><div className="ai-label-actions"><button type="button" className="ai-button" onClick={runAI} disabled={aiState==="loading"}><ShieldCheck/> {aiState==="loading"?"Lendo etiqueta...":"Ler etiqueta com IA"}</button><span className="ai-label-status">{aiState==="not-configured"?"Leitura inteligente disponível.":aiState==="done"?(aiResult?.mode==="ocr-local"?"Leitura local concluída. Confira os dados antes de salvar.":"Etiqueta analisada. Confira os dados antes de salvar."):aiState==="error"?"Não foi possível analisar a etiqueta. Tente novamente.":"A leitura inteligente identifica rastreio e transportadora a partir da foto."}</span></div>{aiResult&&<div className="ai-label-result"><b>Leitura da IA</b>{aiResult.tracking&&<small>Rastreio: {aiResult.tracking}</small>}{aiResult.carrier&&<small>Transportadora: {aiResult.carrier}</small>}{aiResult.recipientName&&<small>Nome identificado: {aiResult.recipientName}</small>}{aiResult.confidence!=null&&<small>Confiança: {Math.round(Number(aiResult.confidence)*100)}%</small>}{aiResult.ocrText&&<details><summary>Texto identificado</summary><small>{aiResult.ocrText}</small></details>}</div>}</div>}
+ {photo&&<div className="ai-label-panel"><img src={photo} alt="Prévia da etiqueta"/><div className="ai-label-actions"><button type="button" className="ai-button" onClick={runAI} disabled={aiState==="loading"}><ShieldCheck/> {aiState==="loading"?"Lendo etiqueta...":"Ler etiqueta com IA"}</button><span className="ai-label-status">{aiState==="not-configured"?"Leitura inteligente disponível.":aiState==="done"?(aiResult?.mode==="ocr-local"?"Leitura local concluída. Confira os dados antes de salvar.":"Etiqueta analisada. Confira os dados antes de salvar."):aiState==="error"?"Não foi possível analisar a etiqueta. Tente novamente.":"A leitura inteligente identifica rastreio, transportadora, destinatário e unidade a partir da foto. Confira antes de salvar."}</span></div>{aiResult&&<div className="ai-label-result"><b>Leitura inteligente</b>{aiResult.tracking&&<small>Rastreio: <strong>{aiResult.tracking}</strong></small>}{aiResult.carrier&&<small>Transportadora: <strong>{aiResult.carrier}</strong></small>}{aiResult.matchedResidentName?<small>Destinatário encontrado: <strong>{aiResult.matchedResidentName}</strong></small>:aiResult.recipientName?<small>Nome identificado: <strong>{aiResult.recipientName}</strong></small>:null}{aiResult.matchedResidentId&&<small>Unidade preenchida: <strong>{aiResult.block||"—"} • Apto {aiResult.apt||"—"}</strong></small>}{aiResult.block&&!aiResult.matchedResidentId&&<small>Bloco identificado: <strong>{aiResult.block}</strong></small>}{aiResult.apt&&!aiResult.matchedResidentId&&<small>Apartamento identificado: <strong>{aiResult.apt}</strong></small>}{aiResult.matchedResidentId&&<small>Proprietário da unidade: <strong>{aiResult.ownerName||"não localizado no cadastro"}</strong></small>}{aiResult.confidence!=null&&<small>Confiança do OCR: {Math.round(Number(aiResult.confidence)*100)}%</small>}{aiResult.ocrText&&<details><summary>Texto identificado</summary><small>{aiResult.ocrText}</small></details>}</div>}</div>}
  {photoError&&<p className="hint">{photoError}</p>}
  <label>Observações<textarea value={f.observations} onChange={e=>setF({...f,observations:e.target.value})}/></label>
  <label>Mensagem para o morador<textarea value={f.messageTemplate} onChange={e=>setF({...f,messageTemplate:e.target.value})} rows={5} placeholder="Escreva o aviso que será enviado pelo WhatsApp"/></label>
