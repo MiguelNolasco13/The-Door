@@ -78,9 +78,28 @@ function detectCarrier(text){
 }
 function extractUnitFromText(text){
  const t=normalizeOCRText(text);
+ let block="",apt="";
  const blockMatch=t.match(/\b(?:BLOCO|BL|BLOCK)\s*[:#.-]?\s*([A-Z0-9]{1,6})\b/);
  const aptMatch=t.match(/\b(?:APTO|APT|APARTAMENTO|AP|UNIDADE|UNID)\s*[:#.-]?\s*([A-Z0-9]{1,8})\b/);
- return {block:blockMatch?.[1]||"",apt:aptMatch?.[1]||""};
+ if(blockMatch?.[1]) block=blockMatch[1];
+ if(aptMatch?.[1]) apt=aptMatch[1];
+ // Muitas etiquetas imprimem a unidade no formato BLOCO/APTO (ex.: 11/104).
+ if(!block || !apt){
+  const pair=t.match(/\b([A-Z0-9]{1,6})\s*[/\-]\s*([A-Z0-9]{1,8})\b/);
+  if(pair){
+   if(!block) block=pair[1];
+   if(!apt) apt=pair[2];
+  }
+ }
+ // Algumas etiquetas OCRizadas perdem a barra e deixam apenas dois números próximos.
+ if(!block || !apt){
+  const near=t.match(/\b(?:BLOCO|BL|BLOCK)?\s*([0-9]{1,3})\s+(?:APTO|APT|APARTAMENTO|AP|UNIDADE|UNID)?\s*([0-9]{2,4})\b/);
+  if(near){
+   if(!block) block=near[1];
+   if(!apt) apt=near[2];
+  }
+ }
+ return {block,apt};
 }
 function scoreResidentAgainstLabel(resident,text){
  const t=normalizeOCRText(text);
@@ -104,10 +123,23 @@ function scoreResidentAgainstLabel(resident,text){
  if(unit.apt&&normalizeOCRText(resident.apt)===unit.apt)score+=.20;
  return Math.min(1,score);
 }
-function findResidentFromLabel(residents,text){
- const ranked=(residents||[]).map(r=>({resident:r,score:scoreResidentAgainstLabel(r,text)})).sort((a,b)=>b.score-a.score);
+function findResidentFromLabel(residents,text,knownUnit={}){
+ const list=residents||[];
+ const unit=extractUnitFromText(text);
+ const block=normalizeOCRText(knownUnit.block||unit.block);
+ const apt=normalizeOCRText(knownUnit.apt||unit.apt);
+ // Primeiro usa a unidade identificada. Isso é mais confiável que o OCR do nome.
+ if(apt){
+  const sameApt=list.filter(r=>normalizeOCRText(r.apt)===apt);
+  if(block){
+   const exact=sameApt.find(r=>normalizeOCRText(r.block)===block);
+   if(exact)return {resident:exact,score:1,reason:"unit-exact"};
+  }
+  if(sameApt.length===1)return {resident:sameApt[0],score:.95,reason:"apt-unique"};
+ }
+ const ranked=list.map(r=>({resident:r,score:scoreResidentAgainstLabel(r,text)})).sort((a,b)=>b.score-a.score);
  const best=ranked[0];
- return best&&best.score>=0.52?best:null;
+ return best&&best.score>=0.52?{...best,reason:"name-ocr"}:null;
 }
 function preprocessOCRImage(image,mode){
  return new Promise((resolve,reject)=>{
@@ -420,66 +452,42 @@ function AddOrder({data,onClose,onSave}){
  const [readBarcode,setReadBarcode]=useState(false); const [photo,setPhoto]=useState(""); const [photoError,setPhotoError]=useState("");
  const [aiState,setAiState]=useState("idle"); const [aiResult,setAiResult]=useState(null);
  const r=data.residents.find(x=>x.id===f.residentId);
- async function analyzeAndFill(image){
+ async function handlePhoto(file){setPhotoError("");setAiResult(null);setAiState("idle");if(!file)return;try{const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)});const img=await new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=dataUrl});const max=1280;const scale=Math.min(1,max/Math.max(img.width,img.height));const canvas=document.createElement("canvas");canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);setPhoto(canvas.toDataURL("image/jpeg",0.72));}catch{setPhotoError("Não foi possível carregar a foto. Tente novamente.")}}
+ async function runAI(){
+  if(!photo){alert("Tire ou selecione a foto da etiqueta primeiro.");return}
   setAiState("loading");
   try{
-   const result=await analyzeLabelWithAI(image);
+   const result=await analyzeLabelWithAI(photo);
    const rawText=String(result?.ocrText||"");
    const unit=extractUnitFromText(rawText);
-   // A IA pode retornar o nome do destinatário mesmo quando o OCR local não conseguiu ler bem o texto.
-   const aiName=String(result?.recipientName||result?.recipient||result?.name||"").trim();
-   const combinedText=[rawText,aiName,result?.block||"",result?.apt||""].filter(Boolean).join(" ");
-   let match=findResidentFromLabel(data.residents,combinedText);
-   // Se a IA informou unidade, ela tem prioridade para localizar o morador cadastrado.
-   const resolvedBlock=String(result?.block||unit.block||match?.resident?.block||"").trim();
-   const resolvedApt=String(result?.apt||unit.apt||match?.resident?.apt||"").trim();
-   if((resolvedBlock||resolvedApt) && !match){
-    const byUnit=(data.residents||[]).find(r=>
-      (!resolvedBlock||normalizeOCRText(r.block)===normalizeOCRText(resolvedBlock)) &&
-      (!resolvedApt||normalizeOCRText(r.apt)===normalizeOCRText(resolvedApt))
-    );
-    if(byUnit)match={resident:byUnit,score:0.9};
-   }
+   const match=findResidentFromLabel(data.residents,rawText,{block:result?.block||unit.block,apt:result?.apt||unit.apt});
    const matched=match?.resident||null;
-   const finalBlock=matched?.block||resolvedBlock;
-   const finalApt=matched?.apt||resolvedApt;
-   const owner=data.residents.find(x=>normalizeOCRText(x.block)===normalizeOCRText(finalBlock)&&normalizeOCRText(x.apt)===normalizeOCRText(finalApt)&&normalizeOCRText(x.relationship)==="PROPRIETARIO");
-   const enriched={...(result||{}),block:finalBlock,apt:finalApt,recipientName:aiName||matched?.name||"",matchedResidentId:matched?.id||"",matchScore:match?.score||0,matchedResidentName:matched?.name||"",ownerName:owner?.name||"",mode:result?.mode||"ai"};
+   const resolvedBlock=result?.block||unit.block||matched?.block||"";
+   const resolvedApt=result?.apt||unit.apt||matched?.apt||"";
+   const owner=data.residents.find(x=>x.block===resolvedBlock&&x.apt===resolvedApt&&String(x.relationship||"").toLowerCase()==="proprietário".toLowerCase());
+   const enriched={...(result||{}),block:resolvedBlock,apt:resolvedApt,recipientName:result?.recipientName||matched?.name||"",matchedResidentId:matched?.id||"",matchScore:match?.score||0,matchedResidentName:matched?.name||"",ownerName:owner?.name||""};
    setAiResult(enriched);
    setF(prev=>{
     const next={...prev};
     if(enriched.tracking)next.tracking=String(enriched.tracking);
     if(enriched.carrier)next.courier=String(enriched.carrier);
-    if(matched?.id)next.residentId=matched.id;
-    if(enriched.description)next.description=String(enriched.description);
+    if(match?.resident?.id)next.residentId=match.resident.id;
     return next;
    });
    setAiState("done");
   }catch(e){setAiState("error")}
  }
- async function handlePhoto(file){
-  setPhotoError("");setAiResult(null);setAiState("idle");if(!file)return;
-  try{
-   const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)});
-   const img=await new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=dataUrl});
-   const max=1280;const scale=Math.min(1,max/Math.max(img.width,img.height));
-   const canvas=document.createElement("canvas");canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
-   const optimized=canvas.toDataURL("image/jpeg",0.72);setPhoto(optimized);
-   // Assim que a foto chega, a leitura é iniciada automaticamente.
-   await analyzeAndFill(optimized);
-  }catch{setPhotoError("Não foi possível carregar ou analisar a foto. Tente novamente.");setAiState("error")}
- }
- async function runAI(){
-  if(!photo){alert("Tire ou selecione a foto da etiqueta primeiro.");return}
-  await analyzeAndFill(photo);
- }
+ useEffect(()=>{
+  if(photo && aiState==="idle") runAI();
+ },[photo]);
  return <Modal title="Nova encomenda" onClose={onClose}><div className="form">
  <label>Morador<select value={f.residentId} onChange={e=>setF({...f,residentId:e.target.value})}>{data.residents.map(r=><option value={r.id} key={r.id}>{r.name} — {r.block}/{r.apt}</option>)}</select></label>
+ {r&&<div className="ai-resident-fill"><strong>Cadastro preenchido automaticamente</strong><small>{r.name}</small><small>Bloco {r.block||"—"} • Apartamento {r.apt||"—"}</small><small>WhatsApp: {r.phone||"Não informado"}</small>{r.street&&<small>{r.street}{r.quadra?` • Quadra ${r.quadra}`:""}</small>}</div>}
  <label>Entregador / transportadora<input value={f.courier} onChange={e=>setF({...f,courier:e.target.value})} placeholder="Nome ou empresa"/></label>
  <label>Código de barras / rastreio<div className="scan-field"><input value={f.tracking} onChange={e=>setF({...f,tracking:e.target.value})} placeholder="Use Ler para escanear ou digite"/><button type="button" onClick={()=>setReadBarcode(true)}><ScanLine/> Escanear</button></div><small className="hint">Ao tocar em Escanear, a câmera deve ler o código de barras da etiqueta e preencher este campo automaticamente.</small></label>
  <label>Descrição<input value={f.description} onChange={e=>setF({...f,description:e.target.value})} placeholder="Caixa, envelope, mercado..."/></label>
  <label>Foto da encomenda / etiqueta<input type="file" accept="image/*" capture="environment" onChange={e=>handlePhoto(e.target.files?.[0])}/></label>
- {photo&&<div className="ai-label-panel"><img src={photo} alt="Prévia da etiqueta"/><div className="ai-label-actions"><button type="button" className="ai-button" onClick={runAI} disabled={aiState==="loading"}><ShieldCheck/> {aiState==="loading"?"Lendo etiqueta...":"Ler etiqueta com IA"}</button><span className="ai-label-status">{aiState==="loading"?"A IA está lendo a etiqueta e procurando o morador no cadastro...":aiState==="done"?(aiResult?.mode?.startsWith("ocr-local")?"Leitura local concluída. Confira os dados antes de salvar.":"IA analisou a etiqueta e preencheu os dados encontrados."):aiState==="error"?"Não foi possível analisar a etiqueta. Tente novamente.":"Ao tirar a foto, a IA analisa automaticamente a etiqueta e procura o morador cadastrado."}</span></div>{aiResult&&<div className="ai-label-result"><b>Leitura inteligente</b>{aiResult.tracking&&<small>Rastreio: <strong>{aiResult.tracking}</strong></small>}{aiResult.carrier&&<small>Transportadora: <strong>{aiResult.carrier}</strong></small>}{aiResult.matchedResidentName?<small>Destinatário encontrado: <strong>{aiResult.matchedResidentName}</strong></small>:aiResult.recipientName?<small>Nome identificado: <strong>{aiResult.recipientName}</strong></small>:null}{aiResult.matchedResidentId&&<small>Unidade preenchida: <strong>{aiResult.block||"—"} • Apto {aiResult.apt||"—"}</strong></small>}{aiResult.block&&!aiResult.matchedResidentId&&<small>Bloco identificado: <strong>{aiResult.block}</strong></small>}{aiResult.apt&&!aiResult.matchedResidentId&&<small>Apartamento identificado: <strong>{aiResult.apt}</strong></small>}{aiResult.matchedResidentId&&<small>Proprietário da unidade: <strong>{aiResult.ownerName||"não localizado no cadastro"}</strong></small>}{aiResult.confidence!=null&&<small>Confiança do OCR: {Math.round(Number(aiResult.confidence)*100)}%</small>}{aiResult.ocrText&&<details><summary>Texto identificado</summary><small>{aiResult.ocrText}</small></details>}</div>}</div>}
+ {photo&&<div className="ai-label-panel"><img src={photo} alt="Prévia da etiqueta"/><div className="ai-label-actions"><button type="button" className="ai-button" onClick={runAI} disabled={aiState==="loading"}><ShieldCheck/> {aiState==="loading"?"Lendo etiqueta...":"Ler etiqueta com IA"}</button><span className="ai-label-status">{aiState==="not-configured"?"Leitura inteligente disponível.":aiState==="done"?(aiResult?.mode==="ocr-local"?"Leitura local concluída. Confira os dados antes de salvar.":"Etiqueta analisada. Confira os dados antes de salvar."):aiState==="error"?"Não foi possível analisar a etiqueta. Tente novamente.":"A leitura automática identifica rastreio, transportadora, destinatário e unidade a partir da foto e preenche os campos do cadastro. Confira antes de salvar."}</span></div>{aiResult&&<div className="ai-label-result"><b>Leitura inteligente</b>{aiResult.tracking&&<small>Rastreio: <strong>{aiResult.tracking}</strong></small>}{aiResult.carrier&&<small>Transportadora: <strong>{aiResult.carrier}</strong></small>}{aiResult.matchedResidentName?<small>Destinatário encontrado: <strong>{aiResult.matchedResidentName}</strong></small>:aiResult.recipientName?<small>Nome identificado: <strong>{aiResult.recipientName}</strong></small>:null}{aiResult.matchedResidentId&&<small>Unidade preenchida: <strong>{aiResult.block||"—"} • Apto {aiResult.apt||"—"}</strong></small>}{aiResult.block&&!aiResult.matchedResidentId&&<small>Bloco identificado: <strong>{aiResult.block}</strong></small>}{aiResult.apt&&!aiResult.matchedResidentId&&<small>Apartamento identificado: <strong>{aiResult.apt}</strong></small>}{aiResult.matchedResidentId&&<small>Proprietário da unidade: <strong>{aiResult.ownerName||"não localizado no cadastro"}</strong></small>}{aiResult.confidence!=null&&<small>Confiança do OCR: {Math.round(Number(aiResult.confidence)*100)}%</small>}{aiResult.ocrText&&<details><summary>Texto identificado</summary><small>{aiResult.ocrText}</small></details>}</div>}</div>}
  {photoError&&<p className="hint">{photoError}</p>}
  <label>Observações<textarea value={f.observations} onChange={e=>setF({...f,observations:e.target.value})}/></label>
  <label>Mensagem para o morador<textarea value={f.messageTemplate} onChange={e=>setF({...f,messageTemplate:e.target.value})} rows={5} placeholder="Escreva o aviso que será enviado pelo WhatsApp"/></label>
