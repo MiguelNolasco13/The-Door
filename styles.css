@@ -521,4 +521,24 @@ nav button.active{
 .ai-label-result{display:grid;gap:4px;padding:10px;border-radius:9px;background:#171613;border:1px solid #433829}
 .ai-label-result b{font-size:11px;color:var(--gold2);text-transform:uppercase;letter-spacing:.7px}
 .ai-label-result small{color:#d5c9b7}
-.ai-suggestions{margin-top:12px;padding:12px;border:1px solid rgba(210,180,120,.28);border-radius:14px;background:rgba(20,18,15,.55);display:flex;flex-direction:column;gap:8px}.ai-suggestion{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid rgba(210,180,120,.18);border-radius:12px;cursor:pointer}.ai-suggestion.selected{border-color:#4f9cff;background:rgba(50,90,150,.12)}.ai-suggestion input{width:18px;height:18px}.ai-suggestion span{display:flex;flex-direction:column;gap:3px}.ai-suggestion span strong{font-size:14px}.ai-suggestion span small{font-size:12px;opacity:.72}
+.pending-intro{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.pending-intro small{opacity:.8}
+.pending-card{overflow:hidden}
+.pending-top{display:flex;gap:14px;align-items:flex-start}
+.pending-photo{width:120px;height:120px;object-fit:cover;border-radius:12px;background:#111;flex:none}
+.pending-photo.missing{display:flex;align-items:center;justify-content:center;color:#999}
+.pending-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.pending-identification{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)}
+.suggestions{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.suggestion{display:flex;gap:10px;align-items:center;padding:12px;border:1px solid rgba(255,255,255,.1);border-radius:12px;cursor:pointer}
+.suggestion.selected{border-color:#d6b36a;background:rgba(214,179,106,.08)}
+.suggestion input{width:auto}
+.suggestion span{display:flex;flex-direction:column;gap:3px}
+.suggestion small{opacity:.75}
+.pending-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}
+.pending-fields label{display:flex;flex-direction:column;gap:6px}
+.pending-confirmed{margin:12px 0;padding:10px 12px;border-radius:10px;background:rgba(70,180,110,.1);border:1px solid rgba(70,180,110,.25)}
+.capture-pending{text-align:center;padding:18px 4px;display:flex;flex-direction:column;gap:14px}
+.capture-icon{display:flex;justify-content:center}
+.capture-pending p{opacity:.85;line-height:1.5}
+@media(max-width:700px){.pending-top{align-items:stretch}.pending-photo{width:96px;height:96px}.pending-fields{grid-template-columns:1fr}.pending-actions button{flex:1}.hero-buttons{display:grid;grid-template-columns:1fr}.bottom-nav button{min-width:0}}
