@@ -56,6 +56,26 @@ function extractTracking(text){
 function normalizeOCRText(value){
  return String(value||"").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Z0-9 ]/g," ").replace(/\s+/g," ").trim();
 }
+function levenshtein(a,b){
+ a=String(a||""); b=String(b||"");
+ if(a===b)return 0;
+ if(!a.length)return b.length;
+ if(!b.length)return a.length;
+ const prev=Array.from({length:b.length+1},(_,i)=>i);
+ for(let i=1;i<=a.length;i++){
+  const cur=[i];
+  for(let j=1;j<=b.length;j++)cur[j]=Math.min(cur[j-1]+1,prev[j]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+  for(let j=0;j<cur.length;j++)prev[j]=cur[j];
+ }
+ return prev[b.length];
+}
+function tokenSimilarity(a,b){
+ a=normalizeOCRText(a); b=normalizeOCRText(b);
+ if(!a||!b)return 0;
+ if(a===b)return 1;
+ if(a.includes(b)||b.includes(a))return Math.min(a.length,b.length)/Math.max(a.length,b.length);
+ return 1-(levenshtein(a,b)/Math.max(a.length,b.length));
+}
 function detectCarrier(text){
  const t=normalizeOCRText(text).toLowerCase();
  const carriers=[
@@ -70,30 +90,75 @@ function extractUnitFromText(text){
  const t=normalizeOCRText(text);
  const blockMatch=t.match(/\b(?:BLOCO|BL|BLOCK)\s*[:#.-]?\s*([A-Z0-9]{1,6})\b/);
  const aptMatch=t.match(/\b(?:APTO|APT|APARTAMENTO|AP|UNIDADE|UNID)\s*[:#.-]?\s*([A-Z0-9]{1,8})\b/);
- const block=blockMatch?.[1]||"";
- const apt=aptMatch?.[1]||"";
- return {block,apt};
+ return {block:blockMatch?.[1]||"",apt:aptMatch?.[1]||""};
 }
 function scoreResidentAgainstLabel(resident,text){
  const t=normalizeOCRText(text);
  const name=normalizeOCRText(resident?.name);
  if(!name)return 0;
  let score=0;
- if(t.includes(name)) score+=0.72;
- const tokens=name.split(" " ).filter(x=>x.length>=3);
- if(tokens.length){
-  const hits=tokens.filter(token=>t.includes(token)).length/tokens.length;
-  score+=Math.min(.45,hits*.15);
+ if(t.includes(name))score+=0.82;
+ const nameTokens=name.split(" ").filter(x=>x.length>=3);
+ const ocrTokens=t.split(" ").filter(x=>x.length>=3);
+ if(nameTokens.length&&ocrTokens.length){
+  let total=0;
+  for(const nt of nameTokens){
+   let best=0;
+   for(const ot of ocrTokens)best=Math.max(best,tokenSimilarity(nt,ot));
+   total+=best;
+  }
+  score+=Math.min(.58,(total/nameTokens.length)*.58);
  }
  const unit=extractUnitFromText(text);
- if(unit.block && normalizeOCRText(resident.block)===unit.block)score+=.16;
- if(unit.apt && normalizeOCRText(resident.apt)===unit.apt)score+=.20;
+ if(unit.block&&normalizeOCRText(resident.block)===unit.block)score+=.16;
+ if(unit.apt&&normalizeOCRText(resident.apt)===unit.apt)score+=.20;
  return Math.min(1,score);
 }
 function findResidentFromLabel(residents,text){
  const ranked=(residents||[]).map(r=>({resident:r,score:scoreResidentAgainstLabel(r,text)})).sort((a,b)=>b.score-a.score);
  const best=ranked[0];
- return best&&best.score>=0.48?best:null;
+ return best&&best.score>=0.52?best:null;
+}
+function preprocessOCRImage(image,mode){
+ return new Promise((resolve,reject)=>{
+  const img=new Image(); img.onload=()=>{
+   const max=2200, scale=Math.min(1.6,max/Math.max(img.width,img.height));
+   const w=Math.max(1,Math.round(img.width*scale)), h=Math.max(1,Math.round(img.height*scale));
+   const c=document.createElement("canvas"); c.width=w; c.height=h;
+   const ctx=c.getContext("2d");
+   ctx.drawImage(img,0,0,w,h);
+   const d=ctx.getImageData(0,0,w,h); const px=d.data;
+   for(let i=0;i<px.length;i+=4){
+    const g=0.299*px[i]+0.587*px[i+1]+0.114*px[i+2];
+    if(mode==="contrast"){
+     const v=Math.max(0,Math.min(255,(g-128)*1.75+128)); px[i]=px[i+1]=px[i+2]=v;
+    }else if(mode==="threshold"){
+     const v=g>160?255:g<105?0:128; px[i]=px[i+1]=px[i+2]=v;
+    }else{px[i]=px[i+1]=px[i+2]=g;}
+   }
+   ctx.putImageData(d,0,0); resolve(c.toDataURL("image/jpeg",0.9));
+  }; img.onerror=reject; img.src=image;
+ });
+}
+async function recognizeBestOCR(Tesseract,image){
+ const worker=await Tesseract.createWorker("por+eng");
+ try{
+  const variants=[];
+  for(const mode of ["original","gray","contrast","threshold"]){
+   const src=mode==="original"?image:await preprocessOCRImage(image,mode);
+   for(const psm of ["6","11"]){
+    try{
+     await worker.setParameters({tessedit_pageseg_mode:psm});
+     const result=await worker.recognize(src);
+     const text=String(result?.data?.text||"").trim();
+     const confidence=Number(result?.data?.confidence||0)/100;
+     const useful=(text.match(/[A-Za-zÀ-ÿ0-9]{3,}/g)||[]).length;
+     variants.push({text,confidence,score:confidence+Math.min(.2,useful/250),mode:`ocr-local-${mode}-psm${psm}`});
+    }catch{}
+   }
+  }
+  return variants.sort((a,b)=>b.score-a.score)[0]||{text:"",confidence:0,mode:"ocr-local"};
+ }finally{try{await worker.terminate()}catch{}}
 }
 async function analyzeLabelWithAI(image){
  if(AI_LABEL_ENDPOINT){
@@ -101,16 +166,11 @@ async function analyzeLabelWithAI(image){
   if(!res.ok)throw new Error("AI_LABEL_REQUEST_FAILED");
   return await res.json();
  }
- // Fallback sem chave: OCR local no navegador + regras de identificação.
  const Tesseract=await loadTesseract();
- const worker=await Tesseract.createWorker("por+eng");
- try{
-  const result=await worker.recognize(image);
-  const text=result?.data?.text||"";
-  const confidence=Number(result?.data?.confidence||0)/100;
-  const unit=extractUnitFromText(text);
-  return {tracking:extractTracking(text),carrier:detectCarrier(text),recipientName:"",block:unit.block,apt:unit.apt,ocrText:text,confidence,mode:"ocr-local"};
- }finally{try{await worker.terminate()}catch{}}
+ const best=await recognizeBestOCR(Tesseract,image);
+ const text=best.text||"";
+ const unit=extractUnitFromText(text);
+ return {tracking:extractTracking(text),carrier:detectCarrier(text),recipientName:"",block:unit.block,apt:unit.apt,ocrText:text,confidence:best.confidence,mode:best.mode};
 }
 // WhatsApp gratuito: abre uma conversa com texto preenchido; o usuário confirma o envio.
 function phoneForWhatsApp(phone){
