@@ -521,3 +521,4 @@ nav button.active{
 .ai-label-result{display:grid;gap:4px;padding:10px;border-radius:9px;background:#171613;border:1px solid #433829}
 .ai-label-result b{font-size:11px;color:var(--gold2);text-transform:uppercase;letter-spacing:.7px}
 .ai-label-result small{color:#d5c9b7}
+.ai-suggestions{margin-top:12px;padding:12px;border:1px solid rgba(210,180,120,.28);border-radius:14px;background:rgba(20,18,15,.55);display:flex;flex-direction:column;gap:8px}.ai-suggestion{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid rgba(210,180,120,.18);border-radius:12px;cursor:pointer}.ai-suggestion.selected{border-color:#4f9cff;background:rgba(50,90,150,.12)}.ai-suggestion input{width:18px;height:18px}.ai-suggestion span{display:flex;flex-direction:column;gap:3px}.ai-suggestion span strong{font-size:14px}.ai-suggestion span small{font-size:12px;opacity:.72}
