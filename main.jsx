@@ -38,12 +38,10 @@ function loadTesseract(){
 }
 function extractTracking(text){
  const clean=String(text||"").toUpperCase().replace(/[^A-Z0-9\n ]/g," ");
- const labeled=clean.match(/(?:TRACKING|RASTREIO|CODIGO|C[ÓO]DIGO|OBJETO)[\s:#-]*([A-Z0-9]{8,18})/i);
+ const labeled=clean.match(/(?:TRACKING|RASTREIO|CODIGO|C[ÓO]DIGO|OBJETO)[\s:#-]*([A-Z]{2}\d{8,12}[A-Z]{2})/i);
  if(labeled?.[1])return labeled[1];
- const alphaCandidates=clean.match(/\b[A-Z]{2}\d{8,12}[A-Z]{2}\b/g)||[];
- const numericCandidates=clean.match(/\b\d{10,16}\b/g)||[];
- const all=[...alphaCandidates,...numericCandidates].filter(v=>!/^20(2[0-9]|3[0-9])$/.test(v));
- return all.sort((a,b)=>b.length-a.length)[0]||"";
+ const candidates=clean.match(/\b[A-Z]{2}\d{8,12}[A-Z]{2}\b/g)||[];
+ return candidates.sort((a,b)=>b.length-a.length)[0]||"";
 }
 function normalizeOCRText(value){
  return String(value||"").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Z0-9 ]/g," ").replace(/\s+/g," ").trim();
@@ -76,12 +74,7 @@ function detectCarrier(text){
   ["Temu",["temu"]],["Jadlog",["jadlog"]],["Loggi",["loggi"]],["Total Express",["total express"]],
   ["J&T Express",["j&t","j&t express"]]
  ];
- const direct=carriers.find(([name,terms])=>terms.some(term=>t.includes(term)))?.[0];
- if(direct)return direct;
- // Algumas etiquetas do Mercado Livre não trazem o nome da empresa no OCR,
- // mas exibem códigos de rota como FRJ/SRJ. Usamos isso apenas como fallback.
- if(/\b(?:FRJ|SRJ)\d{1,3}\b/.test(t) || /\bMELI\b/.test(t))return "Mercado Livre";
- return "";
+ return carriers.find(([name,terms])=>terms.some(term=>t.includes(term)))?.[0]||"";
 }
 function extractUnitFromText(text){
  const t=normalizeOCRText(text);
@@ -207,7 +200,7 @@ async function provisionInvitedUser(firebaseUser){
 function AppContent({user,onLogout}){
  const [data,setData]=useState(initial); const [tab,setTab]=useState("home"); const [query,setQuery]=useState("");
  const [showAdd,setShowAdd]=useState(false); const [showCorrespondence,setShowCorrespondence]=useState(false); const [menuOpen,setMenuOpen]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null); const [pickupReceiptOrders,setPickupReceiptOrders]=useState([]);
- const [notice,setNotice]=useState(""); const [editingNotification,setEditingNotification]=useState(null); const [selectedOrderIds,setSelectedOrderIds]=useState([]);
+ const [notice,setNotice]=useState(""); const [editingNotification,setEditingNotification]=useState(null); const [selectedOrderIds,setSelectedOrderIds]=useState([]); const [identifyingOrder,setIdentifyingOrder]=useState(null);
  const [tenantId,setTenantId]=useState(""); const [tenantName,setTenantName]=useState(""); const [cloudReady,setCloudReady]=useState(false); const [cloudError,setCloudError]=useState("");
  const lastCloudJson=useRef(""); const applyingCloud=useRef(false);
  // O perfil do usuário é provisionado pelo administrador no Firestore; o cliente não pode definir seu próprio condomínio.
@@ -276,19 +269,40 @@ function AppContent({user,onLogout}){
   setData(d=>({...d,orders:d.orders.map(o=>o.id===id?{...o,customMessage:message.trim()}:o)}));
   setEditingNotification(null);notify("Mensagem atualizada. Ela estará pronta ao abrir o WhatsApp.");
  }
+ async function analyzePendingOrder(order){
+  if(!order?.photo)return;
+  setData(d=>({...d,orders:d.orders.map(x=>x.id===order.id?{...x,identificationStatus:"reading"}:x)}));
+  try{
+   const result=await analyzeLabelWithAI(order.photo);
+   const rawText=String(result?.ocrText||"");
+   const unit=extractUnitFromText(rawText);
+   const match=findResidentFromLabel(data.residents,rawText);
+   const matched=match?.resident||null;
+   const resolvedBlock=result?.block||unit.block||matched?.block||"";
+   const resolvedApt=result?.apt||unit.apt||matched?.apt||"";
+   const enriched={...(result||{}),block:resolvedBlock,apt:resolvedApt,recipientName:result?.recipientName||matched?.name||"",matchedResidentId:matched?.id||"",matchScore:match?.score||0,matchedResidentName:matched?.name||""};
+   setData(d=>({...d,orders:d.orders.map(x=>x.id===order.id?{...x,aiLabel:enriched,identificationStatus:"ready",tracking:enriched.tracking||x.tracking||"",courier:enriched.carrier||x.courier||"",residentId:matched?.id||x.residentId||"",residentName:matched?.name||x.residentName||"",address:matched?`${matched.block||""} / ${matched.apt||""}`:x.address||""}:x)}));
+  }catch(e){
+   setData(d=>({...d,orders:d.orders.map(x=>x.id===order.id?{...x,identificationStatus:"error"}:x)}));
+  }
+ }
+ function confirmIdentification(order,residentId){
+  const resident=data.residents.find(r=>r.id===residentId);
+  if(!resident){notify("Selecione um morador antes de confirmar.");return;}
+  const ai=order.aiLabel||{};
+  const updated={...order,residentId,residentName:resident.name,address:`${resident.block||""} / ${resident.apt||""}`,tracking:ai.tracking||order.tracking||"",courier:ai.carrier||order.courier||"",identificationStatus:"identified",identifiedAt:new Date().toISOString()};
+  setData(d=>({...d,orders:d.orders.map(x=>x.id===order.id?updated:x)}));
+  setIdentifyingOrder(null);
+  setTab("orders");
+  notify("Encomenda identificada e registrada. Agora você pode avisar o morador.");
+ }
  function addOrder(o){
   const {notificationChoice="later",...orderFields}=o;
-  const newOrder={...orderFields,id:uid("enc"),code:"TD-"+Math.random().toString(36).slice(2,8).toUpperCase(),status:"Pendente",receivedAt:new Date().toISOString(),notificationStatus:"pending"};
+  const newOrder={...orderFields,id:uid("enc"),code:"TD-"+Math.random().toString(36).slice(2,8).toUpperCase(),status:"Pendente",receivedAt:new Date().toISOString(),notificationStatus:"pending",identificationStatus:o.identificationStatus||"pending"};
   setData(d=>({...d,orders:[newOrder,...d.orders]}));
   setShowAdd(false);
-  if(notificationChoice==="now"){
-   const r=data.residents.find(x=>x.id===newOrder.residentId);
-   const msg=notificationMessage(newOrder);
-   if(!r){notify("Encomenda salva na fila. Vincule um morador para enviar o aviso.");setTab("notifications");return}
-   if(!phoneForWhatsApp(r.phone)||phoneForWhatsApp(r.phone).length<12){notify("Encomenda salva na fila. Confira o telefone do morador com DDD e código do país.");setTab("notifications");return}
-   if(openWhatsAppChat(r.phone,msg)) notify("WhatsApp aberto. Depois de tocar em Enviar, volte ao The Door e marque o aviso como enviado na Central de Notificações.");
-   else notify("Encomenda salva na fila. O navegador bloqueou a janela; abra o aviso pela Central de Notificações.");
-  }else notify("Encomenda cadastrada. O aviso ficou guardado na Central de Notificações.");
+  setTab("pending");
+  notify("Encomenda recebida e enviada para Pendências.");
  }
  function openQueuedNotification(order){
   const r=data.residents.find(x=>x.id===order.residentId);
@@ -386,6 +400,7 @@ function AppContent({user,onLogout}){
  return <div className="app">
   <header><div className="brand"><img className="brand-logo" src={brandIcon} alt="Logo The Door"/><div><b>THE DOOR</b><small className="condo-name">{tenantName||"Condomínio"}</small><small>Gestão de encomendas e correspondências</small></div></div><div className="header-actions"><span className="user-email">{user.email||user.displayName||"Usuário"}</span><button className="icon-menu-btn" onClick={()=>setMenuOpen(true)} title="Menu"><Menu/></button><button onClick={onLogout}><LogOut/> Sair</button></div></header>
   <main>
+   {tab==="pending"&&<PendingIdentification data={data} onOpen={setIdentifyingOrder} onAnalyze={analyzePendingOrder}/>}
    {tab==="home"&&<Dashboard pending={pending} orders={orders} onAdd={()=>setShowAdd(true)} onScan={()=>setScan(true)} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder}/>}
    {tab==="orders"&&<><SectionTitle icon={<History/>} title="Encomendas"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar código, morador, apartamento..."/></div><button className="primary" onClick={()=>setShowAdd(true)}><Plus/> Nova encomenda</button></div><div className="bulk-bar"><div><b>{selectedOrderIds.length} selecionada(s)</b><small>Use a seleção para dar baixa em várias encomendas de uma vez.</small></div><div className="bulk-actions"><button onClick={selectAllPending}>Selecionar pendentes</button><button onClick={clearOrderSelection} disabled={!selectedOrderIds.length}>Limpar</button><button className="primary" onClick={()=>bulkDeliver()} disabled={!selectedOrderIds.length}><CheckCircle2/> Dar baixa em lote</button></div></div><OrderList orders={filtered} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation} selectable selectedIds={selectedOrderIds} onToggleSelect={toggleOrderSelection}/></>}
    {tab==="correspondence"&&<><SectionTitle icon={<Mail/>} title="Cartas e correspondências"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar morador, remetente, código ou tipo..."/></div><button className="primary" onClick={()=>setShowCorrespondence(true)}><Plus/> Nova correspondência</button></div>{data.correspondences.filter(c=>JSON.stringify(c).toLowerCase().includes(query.toLowerCase())).length===0?<div className="empty">Nenhuma correspondência cadastrada.</div>:<div className="cards">{data.correspondences.filter(c=>JSON.stringify(c).toLowerCase().includes(query.toLowerCase())).map(c=>{const r=data.residents.find(x=>x.id===c.residentId);return <div className="card order" key={c.id}><div className="order-main"><div className="code">{c.type||"Correspondência"}</div><b>{r?.name||c.residentName||"Morador não vinculado"}</b><small>{r?`Bloco ${r.block||"—"} • Apto ${r.apt||"—"}`:c.address||"Unidade não informada"}</small><small>Remetente: {c.sender||"Não informado"}</small>{c.tracking&&<small>Código: {c.tracking}</small>}<small>Recebida: {new Date(c.receivedAt).toLocaleString("pt-BR")}</small><span className={c.status==="Entregue"?"badge done":"badge"}>{c.status}</span></div><div className="order-actions">{c.status!=="Entregue"&&<button className="ok" title="Marcar como entregue" onClick={()=>deliverCorrespondence(c.id)}><CheckCircle2/></button>}<button className="danger" title="Excluir" onClick={()=>removeCorrespondence(c.id)}><Trash2/></button></div></div>})}</div>}</>}
@@ -394,8 +409,9 @@ function AppContent({user,onLogout}){
    {tab==="couriers"&&<><SectionTitle icon={<Truck/>} title="Entregadores"/><div className="toolbar"><button className="primary" onClick={()=>setShowCourier(true)}><Plus/> Cadastrar entregador</button></div><div className="cards">{data.couriers.map(c=><div className="card" key={c.id}><b>{c.name}</b><small>{c.company||"Sem empresa"} • {c.phone||"Sem telefone"}</small><small>Documento: {c.doc||"—"} • Placa: {c.plate||"—"}</small></div>)}</div></>}
    {tab==="history"&&<><SectionTitle icon={<History/>} title="Histórico de retiradas"/><OrderList orders={orders.filter(o=>o.status==="Retirada")} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation}/></>}
   </main>
-  <nav className="bottom-nav">{[["home","Início",Home],["orders","Encomendas",PackagePlus],["correspondence","Cartas",Mail],["menu","Menu",Menu]].map(([k,l,I])=><button className={tab===k?"active":""} onClick={()=>k==="menu"?setMenuOpen(true):setTab(k)} key={k}><I/><span>{l}</span></button>)}</nav>
+  <nav className="bottom-nav">{[["home","Início",Home],["pending","Pendências",Clock],["orders","Encomendas",PackagePlus],["correspondence","Cartas",Mail],["menu","Menu",Menu]].map(([k,l,I])=><button className={tab===k?"active":""} onClick={()=>k==="menu"?setMenuOpen(true):setTab(k)} key={k}><I/><span>{l}</span></button>)}</nav>
   {menuOpen&&<div className="menu-overlay" onClick={()=>setMenuOpen(false)}><div className="side-menu" onClick={e=>e.stopPropagation()}><div className="side-menu-head"><div><b>Menu</b><small>{tenantName||"Condomínio"}</small></div><button onClick={()=>setMenuOpen(false)}><X/></button></div><button onClick={()=>{setTab("notifications");setMenuOpen(false)}}><MessageSquare/> Avisos</button><button onClick={()=>{setTab("residents");setMenuOpen(false)}}><Users/> Moradores</button><button onClick={()=>{setTab("couriers");setMenuOpen(false)}}><Truck/> Entregadores</button><button onClick={()=>{setTab("history");setMenuOpen(false)}}><Clock/> Histórico</button><div className="menu-divider"/><button onClick={onLogout}><LogOut/> Sair</button></div></div>}
+  {identifyingOrder&&<IdentifyOrderModal order={identifyingOrder} data={data} onClose={()=>setIdentifyingOrder(null)} onConfirm={confirmIdentification}/>}
   {showAdd&&<AddOrder data={data} onClose={()=>setShowAdd(false)} onSave={addOrder}/>}
   {showCorrespondence&&<CorrespondenceForm data={data} onClose={()=>setShowCorrespondence(false)} onSave={addCorrespondence}/>}
   {editingNotification&&<EditNotification order={editingNotification} resident={data.residents.find(r=>r.id===editingNotification.residentId)} initialMessage={notificationMessage(editingNotification)} onClose={()=>setEditingNotification(null)} onSave={message=>saveEditedNotification(editingNotification.id,message)}/>}
@@ -423,64 +439,51 @@ function OrderCard({o,data,onWhats,onDeliver,onDelete,onShowQr,onConfirmPickup,s
 }
 function Modal({title,children,onClose}){return <div className="overlay"><div className="modal"><div className="modalhead"><h3>{title}</h3><button onClick={onClose}>×</button></div>{children}</div></div>}
 function AddOrder({data,onClose,onSave}){
- const [f,setF]=useState({residentId:data.residents[0]?.id||"",courier:"",tracking:"",description:"",observations:"",notificationChoice:"later",messageTemplate:"Olá, {morador}! Sua encomenda {codigo} está disponível para retirada na portaria. Apresente o QR Code da encomenda ou informe o código {rastreio} ao atendente. Obrigado!"});
- const [readBarcode,setReadBarcode]=useState(false); const [photo,setPhoto]=useState(""); const [photoError,setPhotoError]=useState("");
- const [aiState,setAiState]=useState("idle"); const [aiResult,setAiResult]=useState(null);
- const r=data.residents.find(x=>x.id===f.residentId);
- async function processLabel(photoData){
-  if(!photoData)return;
-  setAiState("loading"); setAiResult(null);
-  try{
-   const result=await analyzeLabelWithAI(photoData);
-   const rawText=String(result?.ocrText||"");
-   const unit=extractUnitFromText(rawText);
-   const match=findResidentFromLabel(data.residents,rawText);
-   const matched=match?.resident||null;
-   const resolvedBlock=result?.block||unit.block||matched?.block||"";
-   const resolvedApt=result?.apt||unit.apt||matched?.apt||"";
-   const owner=data.residents.find(x=>normalizeOCRText(x.block)===normalizeOCRText(resolvedBlock)&&normalizeOCRText(x.apt)===normalizeOCRText(resolvedApt)&&normalizeOCRText(x.relationship)==="PROPRIETARIO");
-   const tracking=result?.tracking||extractTracking(rawText);
-   const carrier=result?.carrier||detectCarrier(rawText);
-   const enriched={...(result||{}),tracking,carrier,block:resolvedBlock,apt:resolvedApt,recipientName:result?.recipientName||matched?.name||"",matchedResidentId:matched?.id||"",matchScore:match?.score||0,matchedResidentName:matched?.name||"",ownerName:owner?.name||""};
-   setAiResult(enriched);
-   setF(prev=>({...prev,tracking:tracking?String(tracking):prev.tracking,courier:carrier?String(carrier):prev.courier,residentId:matched?.id||prev.residentId}));
-   setAiState("done");
-  }catch(e){setAiState("error");}
- }
+ const [photo,setPhoto]=useState(""); const [busy,setBusy]=useState(false); const [error,setError]=useState("");
  async function handlePhoto(file){
-  setPhotoError(""); setAiResult(null); setAiState("idle"); if(!file)return;
+  setError(""); if(!file)return;
   try{
    const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)});
    const img=await new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=dataUrl});
-   const max=1280; const scale=Math.min(1,max/Math.max(img.width,img.height));
-   const canvas=document.createElement("canvas"); canvas.width=Math.round(img.width*scale); canvas.height=Math.round(img.height*scale);
-   canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
-   const compressed=canvas.toDataURL("image/jpeg",0.72);
-   setPhoto(compressed);
-   // A foto entra no fluxo já com leitura automática; não é necessário tocar em outro botão.
-   await processLabel(compressed);
-  }catch{setPhotoError("Não foi possível carregar a foto. Tente novamente.");setAiState("error");}
+   const max=1280,scale=Math.min(1,max/Math.max(img.width,img.height));
+   const canvas=document.createElement("canvas");canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
+   setPhoto(canvas.toDataURL("image/jpeg",0.78));
+  }catch{setError("Não foi possível carregar a foto. Tente novamente.")}
  }
- async function runAI(){if(!photo){alert("Tire ou selecione a foto da etiqueta primeiro.");return}await processLabel(photo)}
- function confirmIdentification(){
-  if(!f.residentId){alert("Selecione um morador identificado antes de confirmar.");return}
-  if(!f.tracking){alert("Não consegui identificar o rastreio. Confira o código antes de confirmar.");return}
-  const resident=data.residents.find(x=>x.id===f.residentId);
-  if(!resident){alert("Morador não localizado no cadastro.");return}
-  onSave({...f,customMessage:f.messageTemplate.trim(),photo,residentName:resident.name,address:`${resident.block} / ${resident.apt}`,notificationChoice:f.notificationChoice,aiLabel:aiResult||null});
+ function save(){
+  if(!photo){setError("Tire a foto da etiqueta para receber a encomenda.");return}
+  setBusy(true);
+  onSave({residentId:"",courier:"",tracking:"",description:"",observations:"",notificationChoice:"later",messageTemplate:"Olá, {morador}! Sua encomenda {codigo} está disponível para retirada na portaria. Apresente o QR Code desta encomenda ou informe o código {rastreio} ao atendente. Obrigado!",photo,residentName:"",address:"",identificationStatus:"pending"});
+  setBusy(false);
  }
- return <Modal title="Identificar encomenda" onClose={onClose}><div className="form">
- <label>Morador<select value={f.residentId} onChange={e=>setF({...f,residentId:e.target.value})}>{data.residents.map(r=><option value={r.id} key={r.id}>{r.name} — {r.block}/{r.apt}</option>)}</select></label>
- <label>Entregador / transportadora<input value={f.courier} onChange={e=>setF({...f,courier:e.target.value})} placeholder="Nome ou empresa"/></label>
- <label>Código de barras / rastreio<div className="scan-field"><input value={f.tracking} onChange={e=>setF({...f,tracking:e.target.value})} placeholder="Use Ler para escanear ou digite"/><button type="button" onClick={()=>setReadBarcode(true)}><ScanLine/> Escanear</button></div><small className="hint">Ao tocar em Escanear, a câmera deve ler o código de barras da etiqueta e preencher este campo automaticamente.</small></label>
- <label>Descrição<input value={f.description} onChange={e=>setF({...f,description:e.target.value})} placeholder="Caixa, envelope, mercado..."/></label>
- <label>Foto da encomenda / etiqueta<input type="file" accept="image/*" capture="environment" onChange={e=>handlePhoto(e.target.files?.[0])}/></label>
- {photo&&<div className="ai-label-panel"><img src={photo} alt="Prévia da etiqueta"/><div className="ai-label-actions"><button type="button" className="ai-button" onClick={runAI} disabled={aiState==="loading"}><ShieldCheck/> {aiState==="loading"?"Lendo etiqueta...":"Ler etiqueta com IA"}</button><span className="ai-label-status">{aiState==="done"?"Etiqueta analisada. Os campos identificados foram preenchidos automaticamente.":aiState==="error"?"Não foi possível analisar a etiqueta. Tente novamente.":"A leitura começa automaticamente ao adicionar a foto."}</span></div>{aiResult&&<div className="ai-label-result"><b>Leitura inteligente</b>{aiResult.tracking&&<small>Rastreio: <strong>{aiResult.tracking}</strong></small>}{aiResult.carrier&&<small>Transportadora: <strong>{aiResult.carrier}</strong></small>}{aiResult.matchedResidentName?<small>Destinatário encontrado: <strong>{aiResult.matchedResidentName}</strong></small>:aiResult.recipientName?<small>Nome identificado: <strong>{aiResult.recipientName}</strong></small>:null}{aiResult.matchedResidentId&&<small>Unidade preenchida: <strong>{aiResult.block||"—"} • Apto {aiResult.apt||"—"}</strong></small>}{aiResult.confidence!=null&&<small>Confiança do OCR: {Math.round(Number(aiResult.confidence)*100)}%</small>}{aiResult.ocrText&&<details><summary>Texto identificado</summary><small>{aiResult.ocrText}</small></details>}</div>}</div>}
- {photoError&&<p className="hint">{photoError}</p>}
- <label>Observações<textarea value={f.observations} onChange={e=>setF({...f,observations:e.target.value})}/></label>
- <label>Mensagem para o morador<textarea value={f.messageTemplate} onChange={e=>setF({...f,messageTemplate:e.target.value})} rows={5} placeholder="Escreva o aviso que será enviado pelo WhatsApp"/></label>
- <label>Quando deseja avisar o morador?<select value={f.notificationChoice} onChange={e=>setF({...f,notificationChoice:e.target.value})}><option value="later">Enviar depois — guardar na Central de Notificações</option><option value="now">Enviar agora — abrir WhatsApp após salvar</option></select></label>
- <button className="primary wide" onClick={confirmIdentification} disabled={aiState==="loading"}>{aiState==="loading"?"Aguarde a leitura...":"Confirmar identificação"}</button></div>{readBarcode&&<Scanner title="Ler etiqueta da transportadora" orders={[]} onClose={()=>setReadBarcode(false)} onRead={value=>{setF(prev=>({...prev,tracking:value}));setReadBarcode(false)}} receiveMode/>}</Modal>
+ return <Modal title="Receber encomenda" onClose={onClose}><div className="form">
+  <p className="hint">Tire somente a foto da etiqueta. A encomenda será enviada para <strong>Pendências</strong> e a identificação será feita lá.</p>
+  <label>Foto da encomenda / etiqueta<input type="file" accept="image/*" capture="environment" onChange={e=>handlePhoto(e.target.files?.[0])}/></label>
+  {photo&&<div className="ai-label-panel"><img src={photo} alt="Prévia da etiqueta"/><div className="ai-label-status">Foto pronta. Ao confirmar, a encomenda vai para Pendências.</div></div>}
+  {error&&<p className="hint">{error}</p>}
+  <button className="primary wide" disabled={!photo||busy} onClick={save}>{busy?"Salvando...":"Enviar para Pendências"}</button>
+ </div></Modal>
+}
+
+function PendingIdentification({data,onOpen,onAnalyze}){
+ const pending=data.orders.filter(o=>o.status==="Pendente"&&o.identificationStatus!=="identified");
+ const [running,setRunning]=useState({});
+ useEffect(()=>{
+  const target=pending.find(o=>o.photo&&!o.aiLabel&&o.identificationStatus!=="reading");
+  if(target&&!running[target.id]){
+   setRunning(v=>({...v,[target.id]:true}));
+   Promise.resolve(onAnalyze(target)).finally(()=>setRunning(v=>{const n={...v};delete n[target.id];return n;}));
+  }
+ },[pending.map(o=>o.id+o.identificationStatus+!!o.aiLabel).join("|")]);
+ return <><SectionTitle icon={<Clock/>} title="Pendências"/><p className="hint">As fotos entram aqui automaticamente. A leitura da etiqueta acontece sem precisar preencher o cadastro manualmente.</p>{pending.length===0?<div className="empty">Nenhuma encomenda aguardando identificação.</div>:<div className="cards">{pending.map(o=>{const ai=o.aiLabel||{};const resident=data.residents.find(r=>r.id===o.residentId);return <div className="card pending-identification" key={o.id}>{o.photo&&<img className="order-photo" src={o.photo} alt="Etiqueta" style={{width:120,height:120,objectFit:"cover",borderRadius:10}}/>}<div className="order-main"><div className="code">{o.code}</div><b>{ai.matchedResidentName||o.residentName||"Destinatário ainda não confirmado"}</b><small>{ai.tracking||o.tracking?`Rastreio: ${ai.tracking||o.tracking}`:"Rastreio: aguardando leitura"}</small><small>{ai.carrier||o.courier?`Transportadora: ${ai.carrier||o.courier}`:"Transportadora: aguardando leitura"}</small><small>{ai.block||resident?.block?`Bloco: ${ai.block||resident?.block}`:"Bloco: aguardando"} • {ai.apt||resident?.apt?`Apto: ${ai.apt||resident?.apt}`:"Apto: aguardando"}</small><span className="badge">{o.identificationStatus==="reading"||running[o.id]?"IA lendo etiqueta...":"Pronto para identificação"}</span></div><div className="order-actions"><button className="primary" onClick={()=>onOpen(o)} disabled={o.identificationStatus==="reading"}>Identificar encomenda</button></div></div>})}</div>}</>
+}
+
+function IdentifyOrderModal({order,data,onClose,onConfirm}){
+ const [selected,setSelected]=useState(order.residentId||order.aiLabel?.matchedResidentId||"");
+ const ai=order.aiLabel||{};
+ const ranked=data.residents.map(r=>({r,score:scoreResidentAgainstLabel(r,ai.ocrText||ai.recipientName||order.residentName||"")})).sort((a,b)=>b.score-a.score).slice(0,5);
+ const current=data.residents.find(r=>r.id===selected);
+ return <Modal title="Identificar encomenda" onClose={onClose}><div className="form">{order.photo&&<img className="identify-photo" src={order.photo} alt="Etiqueta"/>}<div className="ai-label-result"><b>Leitura da etiqueta</b><small>Destinatário: <strong>{ai.matchedResidentName||ai.recipientName||"Não identificado"}</strong></small><small>Bloco: <strong>{ai.block||"Não identificado"}</strong></small><small>Apartamento: <strong>{ai.apt||"Não identificado"}</strong></small><small>Rastreio: <strong>{ai.tracking||order.tracking||"Não identificado"}</strong></small><small>Transportadora: <strong>{ai.carrier||order.courier||"Não identificada"}</strong></small></div><label>Escolha o morador<select value={selected} onChange={e=>setSelected(e.target.value)}><option value="">Selecione...</option>{ranked.map(({r,score})=><option key={r.id} value={r.id}>{r.block}/{r.apt} · {r.name} — {Math.round(score*100)}%</option>)}</select></label>{current&&<div className="ai-confirm">✓ {current.name} — Bloco {current.block}, Apto {current.apt}</div>}<button className="primary wide" disabled={!selected} onClick={()=>onConfirm(order,selected)}>Confirmar identificação e enviar ao morador</button></div></Modal>
 }
 
 function EditNotification({order,resident,initialMessage,onClose,onSave}){
