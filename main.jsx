@@ -390,7 +390,23 @@ function AppContent({user,onLogout}){
   notify("Retirada registrada. Comprovante pronto para compartilhar com o morador.");
  }
  function openWhatsApp(phone,msg){if(!whatsappUrl(phone,msg)){notify("Confira o telefone do morador com DDD e código do país antes de enviar pelo WhatsApp.");return}if(!openWhatsAppChat(phone,msg))notify("O navegador bloqueou a nova janela. Permita pop-ups para o The Door e tente novamente.")}
-  function sendWhatsApp(o){const r=data.residents.find(x=>x.id===o.residentId);if(!r){notify("Cadastre ou vincule um morador para enviar a mensagem.");return}const msg=`Olá, ${r.name}! Sua encomenda ${o.code} está disponível para retirada na portaria. Apresente o QR Code desta encomenda ou informe o código ${o.tracking||o.code} ao atendente. Obrigado!`;openWhatsApp(r.phone,msg)}
+  async function sendWhatsApp(o){
+  const r=data.residents.find(x=>x.id===o.residentId);
+  if(!r){notify("Cadastre ou vincule um morador para enviar a mensagem.");return}
+  const msg=`Olá, ${r.name}! Sua encomenda ${o.code} está disponível para retirada na portaria. Apresente o QR Code desta encomenda ou informe o código ${o.tracking||o.code} ao atendente. Obrigado!`;
+  try{
+   const qrData=await QRCode.toDataURL(o.code,{width:520,margin:2,errorCorrectionLevel:"M"});
+   const blob=await (await fetch(qrData)).blob();
+   const file=new File([blob],`The-Door-${o.code}.png`,{type:"image/png"});
+   if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
+    await navigator.share({files:[file],title:`The Door - ${o.code}`,text:msg});
+    notify("Comunicado preparado com QR Code e mensagem. Confirme o envio no WhatsApp.");
+    return;
+   }
+  }catch(e){}
+  // Fallback: quando o navegador não permite compartilhar arquivo, abre o WhatsApp com a mensagem.
+  openWhatsApp(r.phone,msg);
+ }
   function sendPickupConfirmation(o,method){setPickupReceiptOrders([{...o,pickupMethod:method||o.pickupMethod||"manual"}]);}
  function addCorrespondence(c){const resident=data.residents.find(x=>x.id===c.residentId);const item={...c,id:uid("cor"),status:"Aguardando",receivedAt:new Date().toISOString(),residentName:resident?.name||"",address:resident?`${resident.block||""} / ${resident.apt||""}`:""};setData(d=>({...d,correspondences:[item,...d.correspondences]}));setShowCorrespondence(false);notify("Correspondência cadastrada com sucesso.")}
  function deliverCorrespondence(id){setData(d=>({...d,correspondences:d.correspondences.map(c=>c.id===id?{...c,status:"Entregue",deliveredAt:new Date().toISOString()}:c)}));notify("Correspondência marcada como entregue.")}
