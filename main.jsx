@@ -130,25 +130,27 @@ function preprocessOCRImage(image,mode){
   }; img.onerror=reject; img.src=image;
  });
 }
+let ocrWorkerPromise=null;
+async function getOCRWorker(Tesseract){
+ if(!ocrWorkerPromise){ocrWorkerPromise=Tesseract.createWorker("por+eng");}
+ return await ocrWorkerPromise;
+}
 async function recognizeBestOCR(Tesseract,image){
- const worker=await Tesseract.createWorker("por+eng");
- try{
-  const variants=[];
-  for(const mode of ["original","gray","contrast","threshold"]){
+ const worker=await getOCRWorker(Tesseract);
+ const variants=[];
+ // Leitura rápida: duas passagens costumam ser suficientes para etiquetas logísticas.
+ for(const [mode,psm] of [["original","11"],["contrast","6"]]){
+  try{
    const src=mode==="original"?image:await preprocessOCRImage(image,mode);
-   for(const psm of ["6","11"]){
-    try{
-     await worker.setParameters({tessedit_pageseg_mode:psm});
-     const result=await worker.recognize(src);
-     const text=String(result?.data?.text||"").trim();
-     const confidence=Number(result?.data?.confidence||0)/100;
-     const useful=(text.match(/[A-Za-zÀ-ÿ0-9]{3,}/g)||[]).length;
-     variants.push({text,confidence,score:confidence+Math.min(.2,useful/250),mode:`ocr-local-${mode}-psm${psm}`});
-    }catch{}
-   }
-  }
-  return variants.sort((a,b)=>b.score-a.score)[0]||{text:"",confidence:0,mode:"ocr-local"};
- }finally{try{await worker.terminate()}catch{}}
+   await worker.setParameters({tessedit_pageseg_mode:psm});
+   const result=await worker.recognize(src);
+   const text=String(result?.data?.text||"").trim();
+   const confidence=Number(result?.data?.confidence||0)/100;
+   const useful=(text.match(/[A-Za-zÀ-ÿ0-9]{3,}/g)||[]).length;
+   variants.push({text,confidence,score:confidence+Math.min(.2,useful/250),mode:`ocr-local-${mode}-psm${psm}`});
+  }catch{}
+ }
+ return variants.sort((a,b)=>b.score-a.score)[0]||{text:"",confidence:0,mode:"ocr-local"};
 }
 async function analyzeLabelWithAI(image){
  if(AI_LABEL_ENDPOINT){
@@ -199,7 +201,7 @@ async function provisionInvitedUser(firebaseUser){
 
 function AppContent({user,onLogout}){
  const [data,setData]=useState(initial); const [tab,setTab]=useState("home"); const [query,setQuery]=useState("");
- const [showAdd,setShowAdd]=useState(false); const [showCorrespondence,setShowCorrespondence]=useState(false); const [menuOpen,setMenuOpen]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null); const [pickupReceiptOrders,setPickupReceiptOrders]=useState([]);
+ const [showAdd,setShowAdd]=useState(false); const [showCorrespondence,setShowCorrespondence]=useState(false); const [sharingCorrespondence,setSharingCorrespondence]=useState(null); const [menuOpen,setMenuOpen]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null); const [pickupReceiptOrders,setPickupReceiptOrders]=useState([]);
  const [notice,setNotice]=useState(""); const [editingNotification,setEditingNotification]=useState(null); const [selectedOrderIds,setSelectedOrderIds]=useState([]); const [identifyingOrder,setIdentifyingOrder]=useState(null);
  const [tenantId,setTenantId]=useState(""); const [tenantName,setTenantName]=useState(""); const [cloudReady,setCloudReady]=useState(false); const [cloudError,setCloudError]=useState("");
  const lastCloudJson=useRef(""); const applyingCloud=useRef(false);
@@ -419,7 +421,7 @@ function AppContent({user,onLogout}){
    {tab==="pending"&&<PendingIdentification data={data} onOpen={setIdentifyingOrder} onAnalyze={analyzePendingOrder}/>}
    {tab==="home"&&<Dashboard pending={pending} orders={orders} onAdd={()=>setShowAdd(true)} onScan={()=>setScan(true)} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder}/>}
    {tab==="orders"&&<><SectionTitle icon={<History/>} title="Encomendas"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar código, morador, apartamento..."/></div><button className="primary" onClick={()=>setShowAdd(true)}><Plus/> Nova encomenda</button></div><div className="bulk-bar"><div><b>{selectedOrderIds.length} selecionada(s)</b><small>Use a seleção para dar baixa em várias encomendas de uma vez.</small></div><div className="bulk-actions"><button onClick={selectAllPending}>Selecionar pendentes</button><button onClick={clearOrderSelection} disabled={!selectedOrderIds.length}>Limpar</button><button className="primary" onClick={()=>bulkDeliver()} disabled={!selectedOrderIds.length}><CheckCircle2/> Dar baixa em lote</button></div></div><OrderList orders={filtered} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation} selectable selectedIds={selectedOrderIds} onToggleSelect={toggleOrderSelection}/></>}
-   {tab==="correspondence"&&<><SectionTitle icon={<Mail/>} title="Cartas e correspondências"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar morador, remetente, código ou tipo..."/></div><button className="primary" onClick={()=>setShowCorrespondence(true)}><Plus/> Nova correspondência</button></div>{data.correspondences.filter(c=>JSON.stringify(c).toLowerCase().includes(query.toLowerCase())).length===0?<div className="empty">Nenhuma correspondência cadastrada.</div>:<div className="cards">{data.correspondences.filter(c=>JSON.stringify(c).toLowerCase().includes(query.toLowerCase())).map(c=>{const r=data.residents.find(x=>x.id===c.residentId);return <div className="card order" key={c.id}><div className="order-main"><div className="code">{c.type||"Correspondência"}</div><b>{r?.name||c.residentName||"Morador não vinculado"}</b><small>{r?`Bloco ${r.block||"—"} • Apto ${r.apt||"—"}`:c.address||"Unidade não informada"}</small><small>Remetente: {c.sender||"Não informado"}</small>{c.tracking&&<small>Código: {c.tracking}</small>}<small>Recebida: {new Date(c.receivedAt).toLocaleString("pt-BR")}</small><span className={c.status==="Entregue"?"badge done":"badge"}>{c.status}</span></div><div className="order-actions">{c.status!=="Entregue"&&<button className="ok" title="Marcar como entregue" onClick={()=>deliverCorrespondence(c.id)}><CheckCircle2/></button>}<button className="danger" title="Excluir" onClick={()=>removeCorrespondence(c.id)}><Trash2/></button></div></div>})}</div>}</>}
+   {tab==="correspondence"&&<><SectionTitle icon={<Mail/>} title="Cartas e correspondências"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar morador, remetente, código ou tipo..."/></div><button className="primary" onClick={()=>setShowCorrespondence(true)}><Plus/> Nova correspondência</button></div>{data.correspondences.filter(c=>JSON.stringify(c).toLowerCase().includes(query.toLowerCase())).length===0?<div className="empty">Nenhuma correspondência cadastrada.</div>:<div className="cards">{data.correspondences.filter(c=>JSON.stringify(c).toLowerCase().includes(query.toLowerCase())).map(c=>{const r=data.residents.find(x=>x.id===c.residentId);return <div className="card order" key={c.id}><div className="order-main"><div className="code">{c.type||"Correspondência"}</div><b>{r?.name||c.residentName||"Morador não vinculado"}</b><small>{r?`Bloco ${r.block||"—"} • Apto ${r.apt||"—"}`:c.address||"Unidade não informada"}</small><small>Remetente: {c.sender||"Não informado"}</small>{c.tracking&&<small>Código: {c.tracking}</small>}<small>Recebida: {new Date(c.receivedAt).toLocaleString("pt-BR")}</small><span className={c.status==="Entregue"?"badge done":"badge"}>{c.status}</span></div><div className="order-actions"><button title="Enviar aviso pelo WhatsApp" onClick={()=>setSharingCorrespondence(c)}><Send/></button>{c.status!=="Entregue"&&<button className="ok" title="Marcar como entregue" onClick={()=>deliverCorrespondence(c.id)}><CheckCircle2/></button>}<button className="danger" title="Excluir" onClick={()=>removeCorrespondence(c.id)}><Trash2/></button></div></div>})}</div>}</>}
    {tab==="residents"&&<><SectionTitle icon={<Users/>} title="Moradores por unidade"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar nome, telefone, bloco ou apartamento..."/></div><button className="primary" onClick={()=>{setResidentEdit(null);setResidentUnit(null);setShowResident(true)}}><Plus/> Cadastrar morador</button></div><div className="unit-list">{Object.entries(data.residents.filter(r=>JSON.stringify(r).toLowerCase().includes(query.toLowerCase())).reduce((groups,r)=>{const key=[r.block,r.street,r.quadra,r.apt].map(v=>(v||"").trim().toLowerCase()).join("|");if(!groups[key])groups[key]={key,block:r.block,street:r.street,quadra:r.quadra,apt:r.apt,residents:[]};groups[key].residents.push(r);return groups;},{})).sort((a,b)=>`${a[1].street} ${a[1].quadra} ${a[1].block} ${a[1].apt}`.localeCompare(`${b[1].street} ${b[1].quadra} ${b[1].block} ${b[1].apt}`,"pt-BR")).map(([key,u])=><div className="card unit-card" key={key}><div className="unit-heading"><div className="unit-icon"><MapPin/></div><div className="unit-title"><b>Unidade {u.apt||"não informada"}</b><small>{[u.block&&`Bloco ${u.block}`,u.street,u.quadra&&`Quadra ${u.quadra}`].filter(Boolean).join(" • ")||"Endereço não informado"}</small><small>{u.residents.length} morador(es) cadastrado(s)</small></div><button className="unit-add" onClick={()=>{setResidentEdit(null);setResidentUnit(u);setShowResident(true)}}><UserPlus/> Adicionar</button></div><div className="unit-residents">{u.residents.map(r=><div className="resident-row" key={r.id}><div className="resident-info"><b>{r.name}</b><small>{r.relationship?`Vínculo: ${r.relationship} • `:""}WhatsApp: {r.phone||"Não informado"}</small></div><div className="resident-actions"><button className="edit-resident" title="Editar morador" onClick={()=>{setResidentEdit(r);setResidentUnit(null);setShowResident(true)}}><Pencil/> Editar</button><button className="delete-resident" title="Excluir morador" onClick={()=>removeResident(r.id)}><Trash2/> Excluir</button></div></div>)}</div></div>)}</div>{data.residents.length===0&&<div className="empty">Nenhum morador cadastrado. Use “Cadastrar morador” para começar.</div>}</>}
    {tab==="notifications"&&<><SectionTitle icon={<MessageSquare/>} title="Central de Notificações"/><div className="notification-intro card"><b>{notificationQueue.length} encomenda(s) aguardando aviso</b><small>O The Door agrupa automaticamente as encomendas por morador. Assim, se um morador tiver 3 encomendas para avisar, você envia uma única mensagem com as 3.</small></div>{notificationQueue.length===0?<div className="empty">Nenhum aviso pendente. As encomendas marcadas para “Enviar depois” aparecerão aqui.</div>:<div className="cards">{notificationGroups().map(group=>{const r=data.residents.find(x=>x.id===group[0].residentId);return <div className="card notification-card" key={group[0].residentId||group[0].id}><div className="order-main"><div className="code">{group.length} encomenda{group.length===1?"":"s"}</div><b>{r?.name||group[0].residentName||"Morador não vinculado"}</b><small>{r?`Bloco ${r.block||"—"} • Apto ${r.apt||"—"}`:group[0].address||"Unidade não informada"}</small><small>{group.map(o=>o.code).join(" • ")}</small><span className="badge">Aviso pendente</span></div><div className="notification-actions"><button onClick={()=>group.forEach(o=>setEditingNotification(o))} title="Editar mensagem individual">Editar mensagem</button><button className="primary" onClick={()=>openGroupedNotification(group)}><Send size={16}/> Enviar {group.length===1?"aviso":"os avisos"}</button><button onClick={()=>{if(confirm(`Confirma que a mensagem de ${group.length} encomenda(s) foi enviada pelo WhatsApp?`))markNotificationGroupSent(group)}}><CheckCircle2 size={16}/> Marcar enviado</button></div></div>})}</div>}</>}
    {tab==="couriers"&&<><SectionTitle icon={<Truck/>} title="Entregadores"/><div className="toolbar"><button className="primary" onClick={()=>setShowCourier(true)}><Plus/> Cadastrar entregador</button></div><div className="cards">{data.couriers.map(c=><div className="card" key={c.id}><b>{c.name}</b><small>{c.company||"Sem empresa"} • {c.phone||"Sem telefone"}</small><small>Documento: {c.doc||"—"} • Placa: {c.plate||"—"}</small></div>)}</div></>}
@@ -430,6 +432,7 @@ function AppContent({user,onLogout}){
   {identifyingOrder&&<IdentifyOrderModal order={identifyingOrder} data={data} onClose={()=>setIdentifyingOrder(null)} onConfirm={confirmIdentification}/>}
   {showAdd&&<AddOrder data={data} onClose={()=>setShowAdd(false)} onSave={addOrder}/>}
   {showCorrespondence&&<CorrespondenceForm data={data} onClose={()=>setShowCorrespondence(false)} onSave={addCorrespondence}/>}
+  {sharingCorrespondence&&<CorrespondenceShareModal correspondence={sharingCorrespondence} resident={data.residents.find(r=>r.id===sharingCorrespondence.residentId)} onClose={()=>setSharingCorrespondence(null)}/>}
   {editingNotification&&<EditNotification order={editingNotification} resident={data.residents.find(r=>r.id===editingNotification.residentId)} initialMessage={notificationMessage(editingNotification)} onClose={()=>setEditingNotification(null)} onSave={message=>saveEditedNotification(editingNotification.id,message)}/>}
   {showResident&&<ResidentForm resident={residentEdit} unit={residentUnit} onClose={()=>{setShowResident(false);setResidentEdit(null);setResidentUnit(null)}} onSave={r=>{setData(d=>({...d,residents:residentEdit?d.residents.map(old=>old.id===residentEdit.id?{...old,...r,id:old.id}:old):[...d.residents,{...r,id:uid("mor")}] }));setShowResident(false);setResidentEdit(null);setResidentUnit(null);notify(residentEdit?"Morador atualizado com sucesso.":"Morador cadastrado na unidade.")}}/>}
   {showCourier&&<CourierForm onClose={()=>setShowCourier(false)} onSave={c=>{setData(d=>({...d,couriers:[...d.couriers,{...c,id:uid("ent")}] }));setShowCourier(false)}}/>}
@@ -507,6 +510,19 @@ function EditNotification({order,resident,initialMessage,onClose,onSave}){
  return <Modal title="Editar mensagem do aviso" onClose={onClose}><div className="form"><p className="hint">Encomenda {order.code} • {resident?.name||order.residentName||"Morador não vinculado"}. A alteração será guardada no The Door e usada quando abrir o WhatsApp.</p><label>Mensagem para o morador<textarea rows={7} value={message} onChange={e=>setMessage(e.target.value)} placeholder="Escreva a mensagem"/></label><button className="primary wide" onClick={()=>{if(!message.trim()){alert("A mensagem não pode ficar vazia.");return}onSave(message)}}>Salvar mensagem</button></div></Modal>
 }
 
+function CorrespondenceShareModal({correspondence,resident,onClose}){
+ const defaultMessage=()=>{
+  const name=resident?.name||correspondence.residentName||"morador";
+  const type=correspondence.type||"correspondência";
+  const sender=correspondence.sender?` Remetente: ${correspondence.sender}.`:"";
+  const tracking=correspondence.tracking?` Código de rastreio: ${correspondence.tracking}.`:"";
+  return `Olá, ${name}! Sua ${type.toLowerCase()} foi recebida na portaria e está disponível para retirada.${sender}${tracking} Por favor, compareça à portaria para retirar. Obrigado!`;
+ };
+ const [message,setMessage]=useState(defaultMessage);
+ const send=()=>{if(!message.trim()){alert("A mensagem não pode ficar vazia.");return}if(!resident?.phone){alert("O morador não possui telefone/WhatsApp cadastrado.");return}if(!openWhatsAppChat(resident.phone,message)){window.open("https://wa.me/?text="+encodeURIComponent(message),"_blank");}onClose();};
+ return <Modal title="Mensagem ao morador" onClose={onClose}><div className="form"><p className="hint">Edite a mensagem antes de abrir o WhatsApp. A mensagem abaixo já inclui os dados encontrados da correspondência.</p><label>Mensagem<textarea rows={9} value={message} onChange={e=>setMessage(e.target.value)} style={{width:"100%",boxSizing:"border-box"}}/></label><button className="primary wide" onClick={send}><Send/> Abrir WhatsApp</button></div></Modal>;
+}
+
 function CorrespondenceForm({data,onClose,onSave}){const [f,setF]=useState({residentId:data.residents[0]?.id||"",type:"Carta",sender:"",tracking:"",observations:""});return <Modal title="Nova correspondência" onClose={onClose}><div className="form"><label>Morador<select value={f.residentId} onChange={e=>setF({...f,residentId:e.target.value})}>{data.residents.map(r=><option value={r.id} key={r.id}>{r.name} — {r.block}/{r.apt}</option>)}</select></label><label>Tipo<select value={f.type} onChange={e=>setF({...f,type:e.target.value})}><option>Carta</option><option>Documento</option><option>AR</option><option>Correspondência registrada</option><option>Outro</option></select></label><label>Remetente<input value={f.sender} onChange={e=>setF({...f,sender:e.target.value})} placeholder="Nome ou empresa"/></label><label>Código de rastreio<input value={f.tracking} onChange={e=>setF({...f,tracking:e.target.value})} placeholder="Opcional"/></label><label>Observações<textarea value={f.observations} onChange={e=>setF({...f,observations:e.target.value})}/></label><button className="primary wide" onClick={()=>{if(!f.residentId){alert("Cadastre um morador antes de registrar a correspondência.");return}onSave(f)}}>Cadastrar correspondência</button></div></Modal>}
 function ResidentForm({resident,unit,onClose,onSave}){
  const [f,setF]=useState(()=>resident?{name:resident.name||"",phone:resident.phone||"",block:resident.block||"",street:resident.street||"",quadra:resident.quadra||"",apt:resident.apt||"",relationship:resident.relationship||""}:{name:"",phone:"",block:unit?.block||"",street:unit?.street||"",quadra:unit?.quadra||"",apt:unit?.apt||"",relationship:""});
@@ -552,16 +568,18 @@ function Scanner({orders,onClose,onRead,title="Ler código de barras ou QR Code"
 }
 function PickupReceiptModal({orders,residents,onClose}){
  const [qrMap,setQrMap]=useState({});
+ const [captionMap,setCaptionMap]=useState(()=>Object.fromEntries(orders.map(o=>[o.id,""])));
  useEffect(()=>{
   let alive=true;
   Promise.all(orders.map(async o=>[o.id,await QRCode.toDataURL(o.code,{width:360,margin:2,errorCorrectionLevel:"M"})])).then(entries=>{if(alive)setQrMap(Object.fromEntries(entries))}).catch(()=>{});
   return()=>{alive=false};
  },[orders]);
- const captionFor=o=>{
+ const defaultCaptionFor=o=>{
   const r=residents.find(x=>x.id===o.residentId);
   const name=r?.name||o.residentName||"morador";
   return `Olá, ${name}! Informamos que a encomenda ${o.code} foi retirada na portaria e está sendo encaminhada ao morador. Este é o comprovante de retirada da encomenda. Obrigado!`;
  };
+ const captionFor=o=>captionMap[o.id]||defaultCaptionFor(o);
  const shareOne=async o=>{
   const src=qrMap[o.id]; if(!src)return;
   const caption=captionFor(o);
@@ -589,7 +607,7 @@ function PickupReceiptModal({orders,residents,onClose}){
     <p className="pickup-resident">{r?.name||o.residentName||"Morador"}</p>
     <p className="pickup-unit">{r?`Bloco ${r.block||"—"} • Apto ${r.apt||"—"}`:o.address||"Unidade não informada"}</p>
     {o.tracking&&<p className="pickup-tracking">Rastreio: {o.tracking}</p>}
-    <div className="pickup-caption">{captionFor(o)}</div>
+    <div className="pickup-caption"><label style={{display:"block"}}><span style={{display:"block",marginBottom:6}}>Mensagem ao morador</span><textarea rows={6} value={captionFor(o)} onChange={e=>setCaptionMap(m=>({...m,[o.id]:e.target.value}))} style={{width:"100%",boxSizing:"border-box",background:"#111",color:"#eee",border:"1px solid #57452f",borderRadius:10,padding:10,font: "inherit",lineHeight:1.45}}/></label></div>
     <small className="pickup-date">Retirada em {o.pickedAt?new Date(o.pickedAt).toLocaleString("pt-BR"):new Date().toLocaleString("pt-BR")}</small>
     <div className="pickup-actions"><button className="primary wide" onClick={()=>shareOne(o)}><Send/> Compartilhar comprovante</button><button className="wide" onClick={()=>{const r=residents.find(x=>x.id===o.residentId);const url=whatsappUrl(r?.phone,captionFor(o));if(url)window.open(url,"_blank");else window.open("https://wa.me/?text="+encodeURIComponent(captionFor(o)),"_blank")}}><MessageSquare/> Enviar legenda pelo WhatsApp</button></div>
    </div>})}
