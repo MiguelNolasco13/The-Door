@@ -33,14 +33,22 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/convites/$(request.auth.token.email)).data.email == request.auth.token.email
           && get(/databases/$(database)/documents/convites/$(request.auth.token.email)).data.condominioId == request.resource.data.condominioId
           && get(/databases/$(database)/documents/convites/$(request.auth.token.email)).data.status != "cancelado");
-      allow update, delete: if isOwner() || (signedIn() && request.auth.uid == userId && request.resource.data.condominioId == resource.data.condominioId);
+      allow update: if isOwner()
+      || (signedIn() && request.auth.uid == userId && request.resource.data.condominioId == resource.data.condominioId);
+    allow delete: if isOwner();
     }
 
     match /convites/{inviteId} {
       allow get: if isOwner()
         || (signedIn() && resource.data.email == request.auth.token.email);
       allow list: if isOwner();
-      allow create, update: if isOwner();
+      allow create: if isOwner();
+      allow update: if isOwner()
+        || (signedIn()
+          && resource.data.email == request.auth.token.email
+          && request.resource.data.email == resource.data.email
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status","acceptedAt"])
+          && request.resource.data.status == "accepted");
       allow delete: if isOwner();
     }
 

@@ -1,9 +1,9 @@
 THE DOOR — PRIMEIRA CONFIGURAÇÃO DO FIRESTORE
 
 IMPORTANTE
-- Esta versão sincroniza moradores, entregadores e dados das encomendas pela nuvem.
+- Esta versão sincroniza moradores, entregadores, encomendas e correspondências pela nuvem.
 - As fotos das encomendas continuam somente no aparelho em que foram tiradas. Não são enviadas ao Firestore, pois o Firestore não é um serviço de armazenamento de imagens. A sincronização de fotos exigirá uma solução de armazenamento própria.
-- O controle comercial de condomínios, mensalidades e acesso temporário de suporte ainda não está implementado nesta etapa.
+- A Central Administrativa já possui cadastro de condomínios, licenças, convites e registro de atividades; cobrança automática e pagamentos ainda não estão implementados.
 - Não apague nem altere arquivos fora dos indicados.
 
 1. Atualize o projeto no GitHub com os arquivos deste pacote.
@@ -34,5 +34,5 @@ TESTE
 4. Teste com um usuário de outro condominioId: ele não deve conseguir ler os dados do primeiro condomínio.
 
 OBSERVAÇÕES
-- Apenas dados de teste anteriores não são migrados automaticamente para a nuvem; esta versão começa com uma base vazia por condomínio.
+- Dados antigos que estavam somente no navegador não são migrados automaticamente para a nuvem; a base do condomínio deve ser conferida após a primeira configuração.
 - Não é necessário ativar faturamento para realizar este teste inicial. Mantenha o plano Spark e observe os limites de uso do Firebase.

@@ -5,7 +5,7 @@ import { doc, getDoc, onSnapshot, setDoc, serverTimestamp, collection, getDocs, 
 import { auth, db } from "./firebase.js";
 import QRCode from "qrcode";
 import {Html5Qrcode,Html5QrcodeSupportedFormats} from "html5-qrcode";
-import {PackagePlus,ScanLine,Users,History,Truck,MapPin,Trash2,Send,Search,Home,LogOut,Plus,CheckCircle2,Clock,ChevronRight,Pencil,UserPlus,MessageSquare,Building2,ShieldCheck,Wallet,CalendarDays,RefreshCw,Mail,Menu,X} from "lucide-react";
+import {PackagePlus,ScanLine,Users,History,Truck,MapPin,Trash2,Send,Search,Home,LogOut,Plus,CheckCircle2,Clock,ChevronRight,Pencil,UserPlus,MessageSquare,Building2,ShieldCheck,Wallet,CalendarDays,RefreshCw,Mail,Menu,X,Upload} from "lucide-react";
 import "./styles.css";
 import brandIcon from "./the-door-icon.png";
 
@@ -16,6 +16,57 @@ function mergeLocalPhotos(cloud,current){const orderPhotos=new Map((current.orde
 
 function uid(p="id"){return p+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,7)}
 function normalizeEmail(email){return String(email||"").trim().toLowerCase()}
+function normalizeImportText(v){return String(v||"").replace(/\u00a0/g," ").replace(/\s+/g," ").trim();}
+function parseResidentLine(line){
+ const clean=normalizeImportText(line);
+ if(!clean||/^CADASTRO MORADORES/i.test(clean)||/^NOME\s+Bloco/i.test(clean)||/^BLOCO\s+\d+\s*$/i.test(clean))return null;
+ const m=clean.match(/^(.*?)\s+BLOCO\s+(\d{1,2})\s+([A-Z0-9][A-Z0-9-]{0,7})(?:\s+(.*))?$/i);
+ if(!m)return null;
+ const name=normalizeImportText(m[1]);
+ if(!name||name.length<3||/^BLOCO$/i.test(name)||/^CAIXA$/i.test(name))return null;
+ const rest=normalizeImportText(m[4]||"");
+ const phones=(rest.match(/(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?9?\d{4}[-. ]?\d{4}/g)||[]).map(x=>x.replace(/\D/g,"")).filter(x=>x.length>=10);
+ const email=(rest.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)||[])[0]||"";
+ const relationshipTerms=["PROPRIETÁRIO","PROPRIETÁRIA","INQUILINO","INQUILINA","ESPOSO","ESPOSA","FILHO","FILHA","MÃE","PAI","IRMÃO","IRMÃ","NETO","NETA","NOIVO","NOIVA","NAMORADO","NAMORADA","SOBRINHO","SOBRINHA","NORA","GENRO","MORADOR","MORADORA","FAMÍLIA","AMIGO","AMIGA"];
+ const rel=relationshipTerms.find(term=>new RegExp(`\\b${term.replace(/[ÁÉÍÓÚÃÕÇ]/g,'.')}\\b`,'i').test(rest))||"";
+ return {name,block:m[2],apt:m[3],phone:phones[0]||"",relationship:rel,email,street:"",quadra:""};
+}
+async function extractResidentsFromPdf(file){
+ const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
+ const workerUrl=new URL("pdfjs-dist/legacy/build/pdf.worker.mjs",import.meta.url).toString();
+ pdfjs.GlobalWorkerOptions.workerSrc=workerUrl;
+ const buffer=await file.arrayBuffer();
+ const pdf=await pdfjs.getDocument({data:buffer}).promise;
+ const lines=[];
+ for(let i=1;i<=pdf.numPages;i++){
+  const page=await pdf.getPage(i); const content=await page.getTextContent();
+  const items=content.items||[];
+  const rows=new Map();
+  items.forEach(item=>{
+   const y=Math.round((item.transform?.[5]||0)/2)*2;
+   if(!rows.has(y))rows.set(y,[]); rows.get(y).push(item);
+  });
+  [...rows.entries()].sort((a,b)=>b[0]-a[0]).forEach(([,items])=>{
+   lines.push(items.sort((a,b)=>(a.transform?.[4]||0)-(b.transform?.[4]||0)).map(x=>x.str||"").join(" "));
+  });
+ }
+ return lines.map(parseResidentLine).filter(Boolean);
+}
+function parseResidentsCsv(text){
+ const lines=String(text||"").split(/\\r?\\n/).filter(Boolean);
+ if(!lines.length)return [];
+ const delimiter=lines[0].includes(";")?";":",";
+ const headers=lines[0].split(delimiter).map(h=>normalizeImportText(h).toLowerCase());
+ const idx=(names)=>{for(const n of names){const i=headers.findIndex(h=>h===n||h.includes(n));if(i>=0)return i}return -1};
+ const ni=idx(["nome"]), bi=idx(["bloco"]), ai=idx(["apto","apartamento"]), pi=idx(["contato","telefone","whatsapp"]), ri=idx(["grau","parentesco"]), ei=idx(["e-mail","email"]);
+ return lines.slice(1).map(line=>{
+  const c=line.split(delimiter).map(normalizeImportText); const name=c[ni]||"";
+  if(!name)return null; return {name,block:c[bi]||"",apt:c[ai]||"",phone:(c[pi]||"").replace(/\\D/g,""),relationship:c[ri]||"",email:c[ei]||"",street:"",quadra:""};
+ }).filter(Boolean);
+}
+function dedupeResidents(list){
+ const seen=new Set(); return list.filter(r=>{const key=[normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt),String(r.phone||"")].join("|"); if(seen.has(key))return false;seen.add(key);return true;});
+}
 // Integração preparada para leitura inteligente de etiquetas.
 // O endpoint deve receber { image: "data:image/..." } e retornar JSON com, por exemplo:
 // { tracking, carrier, recipientName, confidence }. A chave de API fica no servidor, nunca no navegador.
@@ -201,7 +252,7 @@ async function provisionInvitedUser(firebaseUser){
 
 function AppContent({user,onLogout}){
  const [data,setData]=useState(initial); const [tab,setTab]=useState("home"); const [query,setQuery]=useState("");
- const [showAdd,setShowAdd]=useState(false); const [showCorrespondence,setShowCorrespondence]=useState(false); const [sharingCorrespondence,setSharingCorrespondence]=useState(null); const [menuOpen,setMenuOpen]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null); const [pickupReceiptOrders,setPickupReceiptOrders]=useState([]);
+ const [showAdd,setShowAdd]=useState(false); const [showResidentImport,setShowResidentImport]=useState(false); const [showCorrespondence,setShowCorrespondence]=useState(false); const [sharingCorrespondence,setSharingCorrespondence]=useState(null); const [menuOpen,setMenuOpen]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null); const [pickupReceiptOrders,setPickupReceiptOrders]=useState([]);
  const [notice,setNotice]=useState(""); const [editingNotification,setEditingNotification]=useState(null); const [selectedOrderIds,setSelectedOrderIds]=useState([]); const [identifyingOrder,setIdentifyingOrder]=useState(null);
  const [tenantId,setTenantId]=useState(""); const [tenantName,setTenantName]=useState(""); const [cloudReady,setCloudReady]=useState(false); const [cloudError,setCloudError]=useState("");
  const lastCloudJson=useRef(""); const applyingCloud=useRef(false);
@@ -297,6 +348,22 @@ function AppContent({user,onLogout}){
   setIdentifyingOrder(null);
   setTab("orders");
   notify("Encomenda identificada e registrada. Agora você pode avisar o morador.");
+ }
+ async function importResidentsFile(file){
+  try{
+   let parsed=[];
+   if(file.name.toLowerCase().endsWith(".pdf")) parsed=await extractResidentsFromPdf(file);
+   else parsed=parseResidentsCsv(await file.text());
+   const residents=dedupeResidents(parsed).map(r=>({...r,id:uid("mor")}));
+   if(!residents.length){notify("Nenhum morador foi encontrado no arquivo.");return;}
+   setData(d=>{
+    const existing=new Map(d.residents.map(r=>[[normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt),String(r.phone||"")].join("|"),r]));
+    const merged=[...d.residents]; let added=0,updated=0;
+    residents.forEach(r=>{const key=[normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt),String(r.phone||"")].join("|"); const old=existing.get(key); if(old){merged[merged.findIndex(x=>x.id===old.id)]={...old,...r,id:old.id};updated++;}else{merged.push(r);added++;}});
+    return {...d,residents:merged};
+   });
+   setShowResidentImport(false); notify(`${residents.length} moradores encontrados. Cadastro atualizado no The Door.`);
+  }catch(e){console.error(e);notify("Não foi possível ler o arquivo. Use o PDF original ou um CSV com Nome, Bloco, Apartamento e Contato.");}
  }
  function addOrder(o){
   const {notificationChoice="later",...orderFields}=o;
@@ -428,13 +495,14 @@ function AppContent({user,onLogout}){
    {tab==="history"&&<><SectionTitle icon={<History/>} title="Histórico de retiradas"/><OrderList orders={orders.filter(o=>o.status==="Retirada")} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation}/></>}
   </main>
   <nav className="bottom-nav">{[["home","Início",Home],["pending","Pendências",Clock],["orders","Encomendas",PackagePlus],["correspondence","Cartas",Mail],["menu","Menu",Menu]].map(([k,l,I])=><button className={tab===k?"active":""} onClick={()=>k==="menu"?setMenuOpen(true):setTab(k)} key={k}><I/><span>{l}</span></button>)}</nav>
-  {menuOpen&&<div className="menu-overlay" onClick={()=>setMenuOpen(false)}><div className="side-menu" onClick={e=>e.stopPropagation()}><div className="side-menu-head"><div><b>Menu</b><small>{tenantName||"Condomínio"}</small></div><button onClick={()=>setMenuOpen(false)}><X/></button></div><button onClick={()=>{setTab("notifications");setMenuOpen(false)}}><MessageSquare/> Avisos</button><button onClick={()=>{setTab("residents");setMenuOpen(false)}}><Users/> Moradores</button><button onClick={()=>{setTab("couriers");setMenuOpen(false)}}><Truck/> Entregadores</button><button onClick={()=>{setTab("history");setMenuOpen(false)}}><Clock/> Histórico</button><div className="menu-divider"/><button onClick={onLogout}><LogOut/> Sair</button></div></div>}
+  {menuOpen&&<div className="menu-overlay" onClick={()=>setMenuOpen(false)}><div className="side-menu" onClick={e=>e.stopPropagation()}><div className="side-menu-head"><div><b>Menu</b><small>{tenantName||"Condomínio"}</small></div><button onClick={()=>setMenuOpen(false)}><X/></button></div><button onClick={()=>{setTab("notifications");setMenuOpen(false)}}><MessageSquare/> Avisos</button><button onClick={()=>{setTab("residents");setMenuOpen(false)}}><Users/> Moradores</button><button onClick={()=>{setShowResidentImport(true);setMenuOpen(false)}}><Upload/> Importar moradores</button><button onClick={()=>{setTab("couriers");setMenuOpen(false)}}><Truck/> Entregadores</button><button onClick={()=>{setTab("history");setMenuOpen(false)}}><Clock/> Histórico</button><div className="menu-divider"/><button onClick={onLogout}><LogOut/> Sair</button></div></div>}
   {identifyingOrder&&<IdentifyOrderModal order={identifyingOrder} data={data} onClose={()=>setIdentifyingOrder(null)} onConfirm={confirmIdentification}/>}
   {showAdd&&<AddOrder data={data} onClose={()=>setShowAdd(false)} onSave={addOrder}/>}
   {showCorrespondence&&<CorrespondenceForm data={data} onClose={()=>setShowCorrespondence(false)} onSave={addCorrespondence}/>}
   {sharingCorrespondence&&<CorrespondenceShareModal correspondence={sharingCorrespondence} resident={data.residents.find(r=>r.id===sharingCorrespondence.residentId)} onClose={()=>setSharingCorrespondence(null)}/>}
   {editingNotification&&<EditNotification order={editingNotification} resident={data.residents.find(r=>r.id===editingNotification.residentId)} initialMessage={notificationMessage(editingNotification)} onClose={()=>setEditingNotification(null)} onSave={message=>saveEditedNotification(editingNotification.id,message)}/>}
   {showResident&&<ResidentForm resident={residentEdit} unit={residentUnit} onClose={()=>{setShowResident(false);setResidentEdit(null);setResidentUnit(null)}} onSave={r=>{setData(d=>({...d,residents:residentEdit?d.residents.map(old=>old.id===residentEdit.id?{...old,...r,id:old.id}:old):[...d.residents,{...r,id:uid("mor")}] }));setShowResident(false);setResidentEdit(null);setResidentUnit(null);notify(residentEdit?"Morador atualizado com sucesso.":"Morador cadastrado na unidade.")}}/>}
+  {showResidentImport&&<ResidentImportModal onClose={()=>setShowResidentImport(false)} onImport={importResidentsFile}/>}
   {showCourier&&<CourierForm onClose={()=>setShowCourier(false)} onSave={c=>{setData(d=>({...d,couriers:[...d.couriers,{...c,id:uid("ent")}] }));setShowCourier(false)}}/>}
   {scan&&<Scanner orders={orders} onClose={()=>setScan(false)} onRead={scannedCheckout}/>}
   {qrOrder&&<QrModal order={qrOrder} resident={data.residents.find(r=>r.id===qrOrder.residentId)} onClose={()=>setQrOrder(null)}/> }
@@ -526,6 +594,11 @@ function CorrespondenceShareModal({correspondence,resident,onClose}){
 }
 
 function CorrespondenceForm({data,onClose,onSave}){const [f,setF]=useState({residentId:data.residents[0]?.id||"",type:"Carta",sender:"",tracking:"",observations:"",photo:""});const fileRef=useRef(null);const choosePhoto=e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>4*1024*1024){alert("Escolha uma foto de até 4 MB.");return}const reader=new FileReader();reader.onload=()=>setF(prev=>({...prev,photo:String(reader.result||"")}));reader.readAsDataURL(file);};return <Modal title="Nova correspondência" onClose={onClose}><div className="form"><label>Morador<select value={f.residentId} onChange={e=>setF({...f,residentId:e.target.value})}>{data.residents.map(r=><option value={r.id} key={r.id}>{r.name} — {r.block}/{r.apt}</option>)}</select></label><label>Tipo<select value={f.type} onChange={e=>setF({...f,type:e.target.value})}><option>Carta</option><option>Documento</option><option>AR</option><option>Correspondência registrada</option><option>Outro</option></select></label><label>Remetente<input value={f.sender} onChange={e=>setF({...f,sender:e.target.value})} placeholder="Nome ou empresa"/></label><label>Código de rastreio<input value={f.tracking} onChange={e=>setF({...f,tracking:e.target.value})} placeholder="Opcional"/></label><label>Foto da correspondência<input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={choosePhoto}/></label>{f.photo&&<div className="ai-label-panel"><img src={f.photo} alt="Prévia da correspondência"/><div className="ai-label-status">Foto adicionada. Ela será enviada junto com o aviso ao morador.</div></div>}<label>Observações<textarea value={f.observations} onChange={e=>setF({...f,observations:e.target.value})}/></label><button className="primary wide" onClick={()=>{if(!f.residentId){alert("Cadastre um morador antes de registrar a correspondência.");return}onSave(f)}}>Cadastrar correspondência</button></div></Modal>}
+function ResidentImportModal({onClose,onImport}){
+ const [file,setFile]=useState(null); const [busy,setBusy]=useState(false);
+ const submit=async()=>{if(!file)return;setBusy(true);await onImport(file);setBusy(false)};
+ return <Modal title="Importar moradores" onClose={onClose}><div className="form"><p className="hint">Selecione o PDF original do cadastro ou um CSV. O The Door vai ler nome, bloco, apartamento, contato, vínculo e e-mail quando essas informações estiverem disponíveis.</p><label>Arquivo de moradores<input type="file" accept=".pdf,.csv,text/csv,application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)}/></label>{file&&<div className="ai-label-panel"><b>{file.name}</b><small>{(file.size/1024/1024).toFixed(2)} MB</small><small>Os moradores serão comparados com os cadastros existentes para evitar duplicações.</small></div>}<button className="primary wide" disabled={!file||busy} onClick={submit}><Upload/> {busy?"Lendo cadastro...":"Importar moradores"}</button></div></Modal>;
+}
 function ResidentForm({resident,unit,onClose,onSave}){
  const [f,setF]=useState(()=>resident?{name:resident.name||"",phone:resident.phone||"",block:resident.block||"",street:resident.street||"",quadra:resident.quadra||"",apt:resident.apt||"",relationship:resident.relationship||""}:{name:"",phone:"",block:unit?.block||"",street:unit?.street||"",quadra:unit?.quadra||"",apt:unit?.apt||"",relationship:""});
  const labels={name:"Nome do morador",phone:"Telefone / WhatsApp",block:"Bloco",street:"Rua",quadra:"Quadra",apt:"Apartamento",relationship:"Parentesco / vínculo com o proprietário"};

@@ -1,20 +1,23 @@
 THE DOOR - LOGIN FIREBASE
 
-Esta versão adiciona:
+Esta versão usa:
+- Firebase Authentication.
 - Entrar com Google.
 - Entrar e criar conta com e-mail e senha.
-- Sair da conta.
-- Dados locais separados por usuário neste navegador.
+- Perfil de acesso vinculado a um condomínio por convite.
+- Firestore para sincronizar os dados operacionais entre aparelhos.
 
 ANTES DE PUBLICAR:
 1. No Firebase Console > Authentication > Método de login, confirme Google ativado.
 2. Se quiser e-mail/senha, ative também o provedor E-mail/senha.
-3. Authentication > Configurações > Domínios autorizados: confirme miguelnolasco13.github.io.
+3. Em Authentication > Configurações > Domínios autorizados, confirme o domínio usado pelo GitHub Pages.
 4. Envie o conteúdo desta pasta para a raiz do repositório GitHub The-Door e aguarde a Action concluir.
-5. Teste primeiro com uma conta Google autorizada.
+5. Configure o primeiro proprietário conforme COMO_CONFIGURAR_FIRESTORE.txt.
+6. Para um responsável de condomínio, use a Central Administrativa para cadastrar o condomínio e gerar o convite.
 
 IMPORTANTE:
-- Esta versão usa Firebase Authentication, mas as encomendas, moradores e entregadores continuam salvos no localStorage do navegador. Os dados não são sincronizados entre computadores/funcionários.
-- O primeiro usuário que entrar neste navegador receberá a migração dos dados antigos locais, se houver.
-- Isso ainda NÃO implementa isolamento seguro por condomínio, permissões de plano ou cobrança. Para comercializar, precisamos migrar os dados para Firestore e criar regras de segurança por condomínio no servidor.
-- A configuração do Firebase Web é destinada ao cliente. Nunca coloque credenciais de conta de serviço ou chaves privadas no frontend.
+- O responsável convidado não escolhe o próprio condomínio.
+- No primeiro acesso com e-mail/senha ou Google, o The Door valida o convite e cria o perfil usuarios/{UID} com o condominioId autorizado.
+- Os dados operacionais ficam no Firestore, separados pelo condominioId.
+- As fotos das encomendas permanecem no aparelho nesta etapa; elas ainda não são armazenadas na nuvem.
+- Nunca coloque credenciais de conta de serviço ou chaves privadas no frontend.
