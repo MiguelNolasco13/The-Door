@@ -523,3 +523,42 @@ nav button.active{
 .ai-label-result small{color:#d5c9b7}
 .pending-identification{display:flex;align-items:center;gap:14px}.pending-identification .order-actions{margin-left:auto}.pending-identification .order-actions .primary{width:auto;min-width:170px}.identify-photo{width:100%;max-height:330px;object-fit:contain;border-radius:12px;background:#171613;border:1px solid #514638}.ai-confirm{padding:12px;border-radius:10px;background:#1d3a2c;color:#b8e1c2;border:1px solid #315d43;font-weight:700}.ai-label-panel img{width:100%;max-height:320px;object-fit:contain;border-radius:12px;background:#171613}.ai-label-status{display:block;color:var(--muted);font-size:12px;line-height:1.5;margin-top:8px}.ai-label-result{display:grid;gap:7px;padding:12px;border:1px solid #5a4c39;border-radius:12px;background:#191814}.ai-label-result small{display:block;color:var(--muted)}.ai-label-result strong{color:var(--text)}
 @media(max-width:700px){.pending-identification{display:block}.pending-identification .order-actions{margin-top:12px}.pending-identification .order-actions .primary{width:100%}}
+
+/* Indicador de avisos pendentes */
+.menu-notifications{position:relative;display:flex;align-items:center;gap:10px}
+.notification-count{min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:#d91c2b;color:#fff;font-size:12px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;line-height:1;box-shadow:0 0 0 2px rgba(255,255,255,.9)}
+.import-summary{display:flex;gap:12px;align-items:stretch}
+.import-total{flex:1;padding:16px;border:1px solid #e7e7e7;border-radius:14px;background:#fafafa;display:flex;flex-direction:column;gap:3px}
+.import-total strong{font-size:30px;line-height:1}
+.import-total span{font-size:13px;color:#666}
+.import-source{flex:1;padding:16px;border:1px solid #e7e7e7;border-radius:14px;display:flex;flex-direction:column;gap:5px;min-width:0}
+.import-source b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.import-source small{color:#666}
+.import-blocks{border:1px solid #e7e7e7;border-radius:14px;padding:14px}
+.import-blocks>b{display:block;margin-bottom:8px}
+.import-block-row{display:flex;justify-content:space-between;padding:7px 0;border-top:1px solid #eee}
+.import-block-row:first-of-type{border-top:0}
+.import-warning{border:1px solid #f1c7c7;background:#fff6f6;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:6px}
+.import-warning b{color:#a51d27}
+.import-warning small{color:#6f3b3f;line-height:1.4}
+.import-warning details{margin-top:4px}
+.import-warning-list{margin-top:8px;max-height:150px;overflow:auto;padding:8px;border-radius:8px;background:#fff;border:1px solid #f0dada;font-size:12px;color:#555;display:flex;flex-direction:column;gap:5px}
+.import-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:4px}
+.import-actions button{min-width:120px}
+@media(max-width:520px){.import-summary{flex-direction:column}.import-actions{flex-direction:column}.import-actions button{width:100%}}
+
+/* Resumo informativo de moradores por bloco */
+.resident-block-summary{margin-bottom:16px;padding:16px}
+.resident-block-summary-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.resident-block-summary-head b{display:block;font-size:15px}
+.resident-block-summary-head small{display:block;color:var(--muted);margin-top:4px}
+.resident-block-summary-head strong{font-size:28px;color:var(--gold2);min-width:48px;text-align:right}
+.resident-block-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px}
+.resident-block-item{border:1px solid #4b4032;background:#191814;border-radius:11px;padding:12px;display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 8px}
+.resident-block-item span{font-weight:800;color:var(--text)}
+.resident-block-item b{font-size:20px;color:var(--gold2);grid-row:span 2}
+.resident-block-item small{color:var(--muted);font-size:11px}
+.resident-block-empty{color:var(--muted);font-size:13px;padding:10px 0}
+.bottom-nav-icon{position:relative;display:inline-flex;align-items:center;justify-content:center}
+.bottom-notification-count{position:absolute;top:-9px;right:-14px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#d91c2b;color:#fff;border:2px solid #171613;font-size:10px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;line-height:1;box-shadow:0 1px 5px #0008}
+@media(max-width:700px){.resident-block-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.resident-block-summary{padding:13px}.resident-block-summary-head strong{font-size:24px}}

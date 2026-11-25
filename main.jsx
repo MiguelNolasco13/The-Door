@@ -40,29 +40,33 @@ async function extractResidentsFromPdf(file){
  const lines=[];
  for(let i=1;i<=pdf.numPages;i++){
   const page=await pdf.getPage(i); const content=await page.getTextContent();
-  const items=content.items||[];
-  const rows=new Map();
-  items.forEach(item=>{
-   const y=Math.round((item.transform?.[5]||0)/2)*2;
-   if(!rows.has(y))rows.set(y,[]); rows.get(y).push(item);
-  });
-  [...rows.entries()].sort((a,b)=>b[0]-a[0]).forEach(([,items])=>{
-   lines.push(items.sort((a,b)=>(a.transform?.[4]||0)-(b.transform?.[4]||0)).map(x=>x.str||"").join(" "));
-  });
+  const items=content.items||[]; const rows=new Map();
+  items.forEach(item=>{const y=Math.round((item.transform?.[5]||0)/2)*2;if(!rows.has(y))rows.set(y,[]);rows.get(y).push(item);});
+  [...rows.entries()].sort((a,b)=>b[0]-a[0]).forEach(([,items])=>lines.push(items.sort((a,b)=>(a.transform?.[4]||0)-(b.transform?.[4]||0)).map(x=>x.str||"").join(" ")));
  }
- return lines.map(parseResidentLine).filter(Boolean);
+ const warnings=[]; const residents=[];
+ lines.forEach(line=>{
+  const normalized=normalizeOCRText(line);
+  if(/SE MUDOU|NAO MORA NINGUEM|NAO MORA|MUDOU-SE/.test(normalized)){warnings.push(line);return;}
+  const r=parseResidentLine(line); if(r)residents.push(r);
+ });
+ return {residents,warnings,sourceLines:lines.length};
 }
 function parseResidentsCsv(text){
- const lines=String(text||"").split(/\\r?\\n/).filter(Boolean);
- if(!lines.length)return [];
+ const lines=String(text||"").split(/\r?\n/).filter(Boolean);
+ if(!lines.length)return {residents:[],warnings:[],sourceLines:0};
  const delimiter=lines[0].includes(";")?";":",";
  const headers=lines[0].split(delimiter).map(h=>normalizeImportText(h).toLowerCase());
  const idx=(names)=>{for(const n of names){const i=headers.findIndex(h=>h===n||h.includes(n));if(i>=0)return i}return -1};
- const ni=idx(["nome"]), bi=idx(["bloco"]), ai=idx(["apto","apartamento"]), pi=idx(["contato","telefone","whatsapp"]), ri=idx(["grau","parentesco"]), ei=idx(["e-mail","email"]);
- return lines.slice(1).map(line=>{
-  const c=line.split(delimiter).map(normalizeImportText); const name=c[ni]||"";
-  if(!name)return null; return {name,block:c[bi]||"",apt:c[ai]||"",phone:(c[pi]||"").replace(/\\D/g,""),relationship:c[ri]||"",email:c[ei]||"",street:"",quadra:""};
- }).filter(Boolean);
+ const ni=idx(["nome"]),bi=idx(["bloco"]),ai=idx(["apto","apartamento"]),pi=idx(["contato","telefone","whatsapp"]),ri=idx(["grau","parentesco"]),ei=idx(["e-mail","email"]);
+ const residents=[],warnings=[];
+ lines.slice(1).forEach(line=>{
+  const c=line.split(delimiter).map(normalizeImportText); const name=c[ni]||""; const normalized=normalizeOCRText(line);
+  if(/SE MUDOU|NAO MORA NINGUEM|NAO MORA|MUDOU-SE/.test(normalized)){warnings.push(line);return;}
+  if(!name){warnings.push(line);return;}
+  residents.push({name,block:c[bi]||"",apt:c[ai]||"",phone:(c[pi]||"").replace(/\D/g,""),relationship:c[ri]||"",email:c[ei]||"",street:"",quadra:""});
+ });
+ return {residents,warnings,sourceLines:lines.length-1};
 }
 function dedupeResidents(list){
  const seen=new Set(); return list.filter(r=>{const key=[normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt),String(r.phone||"")].join("|"); if(seen.has(key))return false;seen.add(key);return true;});
@@ -264,7 +268,7 @@ async function provisionInvitedUser(firebaseUser){
 
 function AppContent({user,onLogout}){
  const [data,setData]=useState(initial); const [tab,setTab]=useState("home"); const [query,setQuery]=useState("");
- const [showAdd,setShowAdd]=useState(false); const [showResidentImport,setShowResidentImport]=useState(false); const [showCorrespondence,setShowCorrespondence]=useState(false); const [sharingCorrespondence,setSharingCorrespondence]=useState(null); const [identifyingCorrespondence,setIdentifyingCorrespondence]=useState(null); const [menuOpen,setMenuOpen]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null); const [pickupReceiptOrders,setPickupReceiptOrders]=useState([]);
+ const [showAdd,setShowAdd]=useState(false); const [showResidentImport,setShowResidentImport]=useState(false); const [residentImportPreview,setResidentImportPreview]=useState(null); const [showCorrespondence,setShowCorrespondence]=useState(false); const [sharingCorrespondence,setSharingCorrespondence]=useState(null); const [identifyingCorrespondence,setIdentifyingCorrespondence]=useState(null); const [menuOpen,setMenuOpen]=useState(false); const [showResident,setShowResident]=useState(false); const [residentEdit,setResidentEdit]=useState(null); const [residentUnit,setResidentUnit]=useState(null); const [showCourier,setShowCourier]=useState(false); const [scan,setScan]=useState(false); const [qrOrder,setQrOrder]=useState(null); const [pickupReceiptOrders,setPickupReceiptOrders]=useState([]);
  const [notice,setNotice]=useState(""); const [editingNotification,setEditingNotification]=useState(null); const [editingCorrespondenceNotification,setEditingCorrespondenceNotification]=useState(null); const [selectedOrderIds,setSelectedOrderIds]=useState([]); const [identifyingOrder,setIdentifyingOrder]=useState(null);
  const [tenantId,setTenantId]=useState(""); const [tenantName,setTenantName]=useState(""); const [cloudReady,setCloudReady]=useState(false); const [cloudError,setCloudError]=useState("");
  const lastCloudJson=useRef(""); const applyingCloud=useRef(false);
@@ -323,6 +327,23 @@ function AppContent({user,onLogout}){
  const notificationQueue=orders.filter(o=>o.status==="Pendente"&&o.notificationStatus!=="sent");
  const correspondenceNotificationQueue=data.correspondences.filter(c=>c.status!=="Entregue"&&c.status!=="Pendente"&&c.residentId&&c.notificationStatus!=="sent");
  const totalNotificationQueue=notificationQueue.length+correspondenceNotificationQueue.length;
+ const residentsByBlock=useMemo(()=>{
+  const groups={};
+  for(const resident of data.residents||[]){
+   const raw=String(resident.block||"").trim();
+   const match=raw.match(/\d+/);
+   const key=match?String(Number(match[0])):(raw||"Não informado");
+   if(!groups[key])groups[key]={key,label:match?`Bloco ${Number(match[0])}`:(raw||"Bloco não informado"),count:0};
+   groups[key].count++;
+  }
+  return Object.values(groups).sort((a,b)=>{
+   const an=Number(a.key),bn=Number(b.key);
+   if(Number.isFinite(an)&&Number.isFinite(bn))return an-bn;
+   if(Number.isFinite(an))return -1;
+   if(Number.isFinite(bn))return 1;
+   return a.label.localeCompare(b.label,"pt-BR");
+  });
+ },[data.residents]);
  const filtered=useMemo(()=>orders.filter(o=>JSON.stringify(o).toLowerCase().includes(query.toLowerCase())),[orders,query]);
  function notify(x){setNotice(x);setTimeout(()=>setNotice(""),2500)}
  function notificationMessage(order, kind="arrival"){
@@ -409,21 +430,25 @@ function AppContent({user,onLogout}){
   notify("Encomenda identificada e registrada. Agora você pode avisar o morador.");
  }
  async function importResidentsFile(file){
-  try{
-   let parsed=[];
-   if(file.name.toLowerCase().endsWith(".pdf")) parsed=await extractResidentsFromPdf(file);
-   else parsed=parseResidentsCsv(await file.text());
-   const residents=dedupeResidents(parsed).map(r=>({...r,id:uid("mor")}));
-   if(!residents.length){notify("Nenhum morador foi encontrado no arquivo.");return;}
-   setData(d=>{
-    const existing=new Map(d.residents.map(r=>[[normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt),String(r.phone||"")].join("|"),r]));
-    const merged=[...d.residents]; let added=0,updated=0;
-    residents.forEach(r=>{const key=[normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt),String(r.phone||"")].join("|"); const old=existing.get(key); if(old){merged[merged.findIndex(x=>x.id===old.id)]={...old,...r,id:old.id};updated++;}else{merged.push(r);added++;}});
-    return {...d,residents:merged};
-   });
-   setShowResidentImport(false); notify(`${residents.length} moradores encontrados. Cadastro atualizado no The Door.`);
-  }catch(e){console.error(e);notify("Não foi possível ler o arquivo. Use o PDF original ou um CSV com Nome, Bloco, Apartamento e Contato.");}
- }
+ try{
+  const result=file.name.toLowerCase().endsWith(".pdf")?await extractResidentsFromPdf(file):parseResidentsCsv(await file.text());
+  const residents=dedupeResidents(result.residents||[]);
+  if(!residents.length){notify("Nenhum morador válido foi encontrado no arquivo.");return;}
+  const blocks={}; residents.forEach(r=>{const key=String(r.block||"Não informado").trim()||"Não informado";blocks[key]=(blocks[key]||0)+1;});
+  setResidentImportPreview({fileName:file.name,residents,warnings:result.warnings||[],sourceLines:result.sourceLines||0,blocks});
+ }catch(e){console.error(e);notify("Não foi possível ler o arquivo. Use o PDF original ou um CSV com Nome, Bloco, Apartamento e Contato.");}
+}
+function confirmResidentImport(){
+ const preview=residentImportPreview; if(!preview?.residents?.length)return;
+ const residents=preview.residents.map(r=>({...r,id:uid("mor")}));
+ setData(d=>{
+  const existing=new Map(d.residents.map(r=>[[normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt),String(r.phone||"")].join("|"),r]));
+  const merged=[...d.residents];
+  residents.forEach(r=>{const key=[normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt),String(r.phone||"")].join("|");const old=existing.get(key);if(old){merged[merged.findIndex(x=>x.id===old.id)]={...old,...r,id:old.id};}else merged.push(r);});
+  return {...d,residents:merged};
+ });
+ setResidentImportPreview(null);setShowResidentImport(false);notify(`${residents.length} moradores confirmados e importados no The Door.`);
+}
  function addOrder(o){
   const {notificationChoice="later",...orderFields}=o;
   const newOrder={...orderFields,id:uid("enc"),code:"TD-"+Math.random().toString(36).slice(2,8).toUpperCase(),status:"Pendente",receivedAt:new Date().toISOString(),notificationStatus:"pending",identificationStatus:o.identificationStatus||"pending"};
@@ -548,13 +573,13 @@ function AppContent({user,onLogout}){
    {tab==="home"&&<Dashboard pending={pending} orders={orders} onAdd={()=>setShowAdd(true)} onScan={()=>setScan(true)} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder}/>}
    {tab==="orders"&&<><SectionTitle icon={<History/>} title="Encomendas"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar código, morador, apartamento..."/></div><button className="primary" onClick={()=>setShowAdd(true)}><Plus/> Nova encomenda</button></div><div className="bulk-bar"><div><b>{selectedOrderIds.length} selecionada(s)</b><small>Use a seleção para dar baixa em várias encomendas de uma vez.</small></div><div className="bulk-actions"><button onClick={selectAllPending}>Selecionar pendentes</button><button onClick={clearOrderSelection} disabled={!selectedOrderIds.length}>Limpar</button><button className="primary" onClick={()=>bulkDeliver()} disabled={!selectedOrderIds.length}><CheckCircle2/> Dar baixa em lote</button></div></div><OrderList orders={filtered} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation} selectable selectedIds={selectedOrderIds} onToggleSelect={toggleOrderSelection}/></>}
    {tab==="correspondence"&&<><SectionTitle icon={<Mail/>} title="Cartas e correspondências"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar morador, remetente, código ou tipo..."/></div><button className="primary" onClick={()=>setShowCorrespondence(true)}><Plus/> Nova correspondência</button></div><PendingCorrespondence data={data} onOpen={setIdentifyingCorrespondence} onAnalyze={analyzePendingCorrespondence}/><div className="section-title" style={{marginTop:20}}><History/><h2>Histórico</h2></div>{data.correspondences.filter(c=>c.status!=="Pendente"&&JSON.stringify(c).toLowerCase().includes(query.toLowerCase())).length===0?<div className="empty">Nenhuma correspondência identificada ainda.</div>:<div className="cards">{data.correspondences.filter(c=>c.status!=="Pendente"&&JSON.stringify(c).toLowerCase().includes(query.toLowerCase())).map(c=>{const r=data.residents.find(x=>x.id===c.residentId);return <div className="card order" key={c.id}>{c.photo&&<img className="order-photo" src={c.photo} alt="Correspondência" style={{width:88,height:88,objectFit:"cover",borderRadius:10,flexShrink:0}}/>}<div className="order-main"><div className="code">{c.type||"Correspondência"}</div><b>{r?.name||c.residentName||"Morador não vinculado"}</b><small>{r?`Bloco ${r.block||"—"} • Apto ${r.apt||"—"}`:c.address||"Unidade não informada"}</small><small>Remetente: {c.sender||"Não informado"}</small>{c.tracking&&<small>Código: {c.tracking}</small>}{c.carrier&&<small>Transportadora: {c.carrier}</small>}<small>Recebida: {new Date(c.receivedAt).toLocaleString("pt-BR")}</small><span className={c.status==="Entregue"?"badge done":"badge"}>{c.status}</span></div><div className="order-actions"><button title="Enviar aviso pelo WhatsApp" onClick={()=>setSharingCorrespondence(c)}><Send/></button>{c.status!=="Entregue"&&<button className="ok" title="Marcar como entregue" onClick={()=>deliverCorrespondence(c.id)}><CheckCircle2/></button>}<button className="danger" title="Excluir" onClick={()=>removeCorrespondence(c.id)}><Trash2/></button></div></div>})}</div>}</>}
-   {tab==="residents"&&<><SectionTitle icon={<Users/>} title="Moradores por unidade"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar nome, telefone, bloco ou apartamento..."/></div><button className="primary" onClick={()=>{setResidentEdit(null);setResidentUnit(null);setShowResident(true)}}><Plus/> Cadastrar morador</button></div><div className="unit-list">{Object.entries(data.residents.filter(r=>JSON.stringify(r).toLowerCase().includes(query.toLowerCase())).reduce((groups,r)=>{const key=[r.block,r.street,r.quadra,r.apt].map(v=>(v||"").trim().toLowerCase()).join("|");if(!groups[key])groups[key]={key,block:r.block,street:r.street,quadra:r.quadra,apt:r.apt,residents:[]};groups[key].residents.push(r);return groups;},{})).sort((a,b)=>`${a[1].street} ${a[1].quadra} ${a[1].block} ${a[1].apt}`.localeCompare(`${b[1].street} ${b[1].quadra} ${b[1].block} ${b[1].apt}`,"pt-BR")).map(([key,u])=><div className="card unit-card" key={key}><div className="unit-heading"><div className="unit-icon"><MapPin/></div><div className="unit-title"><b>Unidade {u.apt||"não informada"}</b><small>{[u.block&&`Bloco ${u.block}`,u.street,u.quadra&&`Quadra ${u.quadra}`].filter(Boolean).join(" • ")||"Endereço não informado"}</small><small>{u.residents.length} morador(es) cadastrado(s)</small></div><button className="unit-add" onClick={()=>{setResidentEdit(null);setResidentUnit(u);setShowResident(true)}}><UserPlus/> Adicionar</button></div><div className="unit-residents">{u.residents.map(r=><div className="resident-row" key={r.id}><div className="resident-info"><b>{r.name}</b><small>{r.relationship?`Vínculo: ${r.relationship} • `:""}WhatsApp: {r.phone||"Não informado"}</small></div><div className="resident-actions"><button className="edit-resident" title="Editar morador" onClick={()=>{setResidentEdit(r);setResidentUnit(null);setShowResident(true)}}><Pencil/> Editar</button><button className="delete-resident" title="Excluir morador" onClick={()=>removeResident(r.id)}><Trash2/> Excluir</button></div></div>)}</div></div>)}</div>{data.residents.length===0&&<div className="empty">Nenhum morador cadastrado. Use “Cadastrar morador” para começar.</div>}</>}
+   {tab==="residents"&&<><SectionTitle icon={<Users/>} title="Moradores por unidade"/><div className="resident-block-summary card"><div className="resident-block-summary-head"><div><b>Moradores por bloco</b><small>Quantidade de moradores cadastrados no The Door</small></div><strong>{data.residents.length}</strong></div>{residentsByBlock.length===0?<div className="resident-block-empty">Nenhum morador cadastrado ainda.</div>:<div className="resident-block-grid">{residentsByBlock.map(b=><div className="resident-block-item" key={b.key}><span>{b.label}</span><b>{b.count}</b><small>{b.count===1?"morador":"moradores"}</small></div>)}</div>}</div><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar nome, telefone, bloco ou apartamento..."/></div><button className="primary" onClick={()=>{setResidentEdit(null);setResidentUnit(null);setShowResident(true)}}><Plus/> Cadastrar morador</button></div><div className="unit-list">{Object.entries(data.residents.filter(r=>JSON.stringify(r).toLowerCase().includes(query.toLowerCase())).reduce((groups,r)=>{const key=[r.block,r.street,r.quadra,r.apt].map(v=>(v||"").trim().toLowerCase()).join("|");if(!groups[key])groups[key]={key,block:r.block,street:r.street,quadra:r.quadra,apt:r.apt,residents:[]};groups[key].residents.push(r);return groups;},{})).sort((a,b)=>`${a[1].street} ${a[1].quadra} ${a[1].block} ${a[1].apt}`.localeCompare(`${b[1].street} ${b[1].quadra} ${b[1].block} ${b[1].apt}`,"pt-BR")).map(([key,u])=><div className="card unit-card" key={key}><div className="unit-heading"><div className="unit-icon"><MapPin/></div><div className="unit-title"><b>Unidade {u.apt||"não informada"}</b><small>{[u.block&&`Bloco ${u.block}`,u.street,u.quadra&&`Quadra ${u.quadra}`].filter(Boolean).join(" • ")||"Endereço não informado"}</small><small>{u.residents.length} morador(es) cadastrado(s)</small></div><button className="unit-add" onClick={()=>{setResidentEdit(null);setResidentUnit(u);setShowResident(true)}}><UserPlus/> Adicionar</button></div><div className="unit-residents">{u.residents.map(r=><div className="resident-row" key={r.id}><div className="resident-info"><b>{r.name}</b><small>{r.relationship?`Vínculo: ${r.relationship} • `:""}WhatsApp: {r.phone||"Não informado"}</small></div><div className="resident-actions"><button className="edit-resident" title="Editar morador" onClick={()=>{setResidentEdit(r);setResidentUnit(null);setShowResident(true)}}><Pencil/> Editar</button><button className="delete-resident" title="Excluir morador" onClick={()=>removeResident(r.id)}><Trash2/> Excluir</button></div></div>)}</div></div>)}</div>{data.residents.length===0&&<div className="empty">Nenhum morador cadastrado. Use “Cadastrar morador” para começar.</div>}</>}
    {tab==="notifications"&&<><SectionTitle icon={<MessageSquare/>} title="Central de Notificações"/><div className="notification-intro card"><b>{totalNotificationQueue} aviso(s) aguardando envio</b><small>Encomendas e correspondências identificadas aparecem aqui. O The Door agrupa encomendas por morador e permite editar a mensagem antes de abrir o WhatsApp.</small></div>{totalNotificationQueue===0?<div className="empty">Nenhum aviso pendente. Quando uma encomenda ou correspondência estiver pronta para avisar, ela aparecerá aqui.</div>:<><div className="section-title" style={{marginTop:16}}><PackagePlus/><h2>Encomendas</h2></div>{notificationQueue.length===0?<div className="empty">Nenhuma encomenda aguardando aviso.</div>:<div className="cards">{notificationGroups().map(group=>{const r=data.residents.find(x=>x.id===group[0].residentId);return <div className="card notification-card" key={group[0].residentId||group[0].id}><div className="order-main"><div className="code">{group.length} encomenda{group.length===1?"":"s"}</div><b>{r?.name||group[0].residentName||"Morador não vinculado"}</b><small>{r?`Bloco ${r.block||"—"} • Apto ${r.apt||"—"}`:group[0].address||"Unidade não informada"}</small><small>{group.map(o=>o.code).join(" • ")}</small><span className="badge">Aviso pendente</span></div><div className="notification-actions"><button onClick={()=>setEditingNotification(group[0])} title="Editar mensagem">Editar mensagem</button><button className="primary" onClick={()=>openGroupedNotification(group)}><Send size={16}/> Enviar {group.length===1?"aviso":"os avisos"}</button><button onClick={()=>{if(confirm(`Confirma que a mensagem de ${group.length} encomenda(s) foi enviada pelo WhatsApp?`))markNotificationGroupSent(group)}}><CheckCircle2 size={16}/> Marcar enviado</button></div></div>})}</div>}<div className="section-title" style={{marginTop:24}}><Mail/><h2>Correspondências</h2></div>{correspondenceNotificationQueue.length===0?<div className="empty">Nenhuma correspondência aguardando aviso.</div>:<div className="cards">{correspondenceNotificationQueue.map(c=>{const r=data.residents.find(x=>x.id===c.residentId);return <div className="card notification-card" key={c.id}><div className="order-main">{c.photo&&<img className="order-photo" src={c.photo} alt="Correspondência" style={{width:64,height:64,objectFit:"cover",borderRadius:10,flexShrink:0}}/>}<div className="code">{c.type||"Correspondência"}</div><b>{r?.name||c.residentName||"Morador não vinculado"}</b><small>{r?`Bloco ${r.block||"—"} • Apto ${r.apt||"—"}`:c.address||"Unidade não informada"}</small>{c.sender&&<small>Remetente: {c.sender}</small>}{c.tracking&&<small>Código: {c.tracking}</small>}<span className="badge">Aviso pendente</span></div><div className="notification-actions"><button onClick={()=>setEditingCorrespondenceNotification(c)} title="Editar mensagem">Editar mensagem</button><button className="primary" onClick={()=>openCorrespondenceNotification(c)}><Send size={16}/> Enviar aviso</button><button onClick={()=>{if(confirm("Confirma que a mensagem desta correspondência foi enviada pelo WhatsApp?"))markCorrespondenceNotificationSent(c.id)}}><CheckCircle2 size={16}/> Marcar enviado</button></div></div>})}</div>}</>}</>}
    {tab==="couriers"&&<><SectionTitle icon={<Truck/>} title="Entregadores"/><div className="toolbar"><button className="primary" onClick={()=>setShowCourier(true)}><Plus/> Cadastrar entregador</button></div><div className="cards">{data.couriers.map(c=><div className="card" key={c.id}><b>{c.name}</b><small>{c.company||"Sem empresa"} • {c.phone||"Sem telefone"}</small><small>Documento: {c.doc||"—"} • Placa: {c.plate||"—"}</small></div>)}</div></>}
    {tab==="history"&&<><SectionTitle icon={<History/>} title="Histórico de retiradas"/><OrderList orders={orders.filter(o=>o.status==="Retirada")} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation}/></>}
   </main>
-  <nav className="bottom-nav">{[["home","Início",Home],["pending","Pendências",Clock],["orders","Encomendas",PackagePlus],["correspondence","Cartas",Mail],["menu","Menu",Menu]].map(([k,l,I])=><button className={tab===k?"active":""} onClick={()=>k==="menu"?setMenuOpen(true):setTab(k)} key={k}><I/><span>{l}</span></button>)}</nav>
-  {menuOpen&&<div className="menu-overlay" onClick={()=>setMenuOpen(false)}><div className="side-menu" onClick={e=>e.stopPropagation()}><div className="side-menu-head"><div><b>Menu</b><small>{tenantName||"Condomínio"}</small></div><button onClick={()=>setMenuOpen(false)}><X/></button></div><button onClick={()=>{setTab("notifications");setMenuOpen(false)}}><MessageSquare/> Avisos</button><button onClick={()=>{setTab("residents");setMenuOpen(false)}}><Users/> Moradores</button><button onClick={()=>{setShowResidentImport(true);setMenuOpen(false)}}><Upload/> Importar moradores</button><button onClick={()=>{setTab("couriers");setMenuOpen(false)}}><Truck/> Entregadores</button><button onClick={()=>{setTab("history");setMenuOpen(false)}}><Clock/> Histórico</button><div className="menu-divider"/><button onClick={onLogout}><LogOut/> Sair</button></div></div>}
+  <nav className="bottom-nav">{[["home","Início",Home],["pending","Pendências",Clock],["orders","Encomendas",PackagePlus],["correspondence","Cartas",Mail],["menu","Menu",Menu]].map(([k,l,I])=><button className={tab===k?"active":""} onClick={()=>k==="menu"?setMenuOpen(true):setTab(k)} key={k}><span className="bottom-nav-icon"><I/>{k==="menu"&&totalNotificationQueue>0&&<span className="bottom-notification-count">{totalNotificationQueue>99?"99+":totalNotificationQueue}</span>}</span><span>{l}</span></button>)}</nav>
+  {menuOpen&&<div className="menu-overlay" onClick={()=>setMenuOpen(false)}><div className="side-menu" onClick={e=>e.stopPropagation()}><div className="side-menu-head"><div><b>Menu</b><small>{tenantName||"Condomínio"}</small></div><button onClick={()=>setMenuOpen(false)}><X/></button></div><button className="menu-notifications" onClick={()=>{setTab("notifications");setMenuOpen(false)}}><MessageSquare/> <span>Avisos</span>{totalNotificationQueue>0&&<span className="notification-count">{totalNotificationQueue>99?"99+":totalNotificationQueue}</span>}</button><button onClick={()=>{setTab("residents");setMenuOpen(false)}}><Users/> Moradores</button><button onClick={()=>{setShowResidentImport(true);setMenuOpen(false)}}><Upload/> Importar moradores</button><button onClick={()=>{setTab("couriers");setMenuOpen(false)}}><Truck/> Entregadores</button><button onClick={()=>{setTab("history");setMenuOpen(false)}}><Clock/> Histórico</button><div className="menu-divider"/><button onClick={onLogout}><LogOut/> Sair</button></div></div>}
   {identifyingOrder&&<IdentifyOrderModal order={identifyingOrder} data={data} onClose={()=>setIdentifyingOrder(null)} onConfirm={confirmIdentification}/>}
   {identifyingCorrespondence&&<IdentifyCorrespondenceModal item={identifyingCorrespondence} data={data} onClose={()=>setIdentifyingCorrespondence(null)} onConfirm={confirmCorrespondenceIdentification}/>}
   {showAdd&&<AddOrder data={data} onClose={()=>setShowAdd(false)} onSave={addOrder}/>}
@@ -564,6 +589,7 @@ function AppContent({user,onLogout}){
   {editingCorrespondenceNotification&&<EditNotification order={editingCorrespondenceNotification} resident={data.residents.find(r=>r.id===editingCorrespondenceNotification.residentId)} initialMessage={correspondenceNotificationMessage(editingCorrespondenceNotification)} onClose={()=>setEditingCorrespondenceNotification(null)} onSave={message=>saveEditedCorrespondenceNotification(editingCorrespondenceNotification.id,message)}/>}
   {showResident&&<ResidentForm resident={residentEdit} unit={residentUnit} onClose={()=>{setShowResident(false);setResidentEdit(null);setResidentUnit(null)}} onSave={r=>{setData(d=>({...d,residents:residentEdit?d.residents.map(old=>old.id===residentEdit.id?{...old,...r,id:old.id}:old):[...d.residents,{...r,id:uid("mor")}] }));setShowResident(false);setResidentEdit(null);setResidentUnit(null);notify(residentEdit?"Morador atualizado com sucesso.":"Morador cadastrado na unidade.")}}/>}
   {showResidentImport&&<ResidentImportModal onClose={()=>setShowResidentImport(false)} onImport={importResidentsFile}/>}
+  {residentImportPreview&&<ResidentImportPreview preview={residentImportPreview} onClose={()=>setResidentImportPreview(null)} onConfirm={confirmResidentImport}/>}
   {showCourier&&<CourierForm onClose={()=>setShowCourier(false)} onSave={c=>{setData(d=>({...d,couriers:[...d.couriers,{...c,id:uid("ent")}] }));setShowCourier(false)}}/>}
   {scan&&<Scanner orders={orders} onClose={()=>setScan(false)} onRead={scannedCheckout}/>}
   {qrOrder&&<QrModal order={qrOrder} resident={data.residents.find(r=>r.id===qrOrder.residentId)} onClose={()=>setQrOrder(null)}/> }
@@ -686,7 +712,16 @@ function CorrespondenceForm({data,onClose,onSave}){
 function ResidentImportModal({onClose,onImport}){
  const [file,setFile]=useState(null); const [busy,setBusy]=useState(false);
  const submit=async()=>{if(!file)return;setBusy(true);await onImport(file);setBusy(false)};
- return <Modal title="Importar moradores" onClose={onClose}><div className="form"><p className="hint">Selecione o PDF original do cadastro ou um CSV. O The Door vai ler nome, bloco, apartamento, contato, vínculo e e-mail quando essas informações estiverem disponíveis.</p><label>Arquivo de moradores<input type="file" accept=".pdf,.csv,text/csv,application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)}/></label>{file&&<div className="ai-label-panel"><b>{file.name}</b><small>{(file.size/1024/1024).toFixed(2)} MB</small><small>Os moradores serão comparados com os cadastros existentes para evitar duplicações.</small></div>}<button className="primary wide" disabled={!file||busy} onClick={submit}><Upload/> {busy?"Lendo cadastro...":"Importar moradores"}</button></div></Modal>;
+ return <Modal title="Importar moradores" onClose={onClose}><div className="form"><p className="hint">Selecione o PDF original do cadastro ou um CSV. Antes de gravar no Firebase, o The Door mostrará uma pré-visualização com a quantidade encontrada e possíveis linhas incompletas ou observações.</p><label>Arquivo de moradores<input type="file" accept=".pdf,.csv,text/csv,application/pdf" onChange={e=>setFile(e.target.files?.[0]||null)}/></label>{file&&<div className="ai-label-panel"><b>{file.name}</b><small>{(file.size/1024/1024).toFixed(2)} MB</small></div>}<button className="primary wide" disabled={!file||busy} onClick={submit}><Upload/> {busy?"Lendo cadastro...":"Pré-visualizar importação"}</button></div></Modal>;
+}
+function ResidentImportPreview({preview,onClose,onConfirm}){
+ const blockEntries=Object.entries(preview.blocks||{}).sort((a,b)=>String(a[0]).localeCompare(String(b[0]),"pt-BR",{numeric:true}));
+ return <Modal title="Pré-visualização da importação" onClose={onClose}><div className="form">
+  <div className="import-summary"><div className="import-total"><strong>{preview.residents.length}</strong><span>moradores encontrados</span></div><div className="import-source"><b>{preview.fileName}</b><small>{preview.sourceLines||0} linhas analisadas</small></div></div>
+  <div className="import-blocks"><b>Distribuição por bloco</b>{blockEntries.length?blockEntries.map(([block,count])=><div className="import-block-row" key={block}><span>Bloco {block}</span><strong>{count}</strong></div>):<small>Nenhum bloco identificado.</small>}</div>
+  {preview.warnings?.length>0&&<div className="import-warning"><b>⚠ {preview.warnings.length} linha(s) precisam de atenção</b><small>Foram encontradas linhas com observações como “se mudou”, “não mora” ou dados incompletos. Elas não serão gravadas automaticamente.</small><details><summary>Ver linhas ignoradas</summary><div className="import-warning-list">{preview.warnings.slice(0,30).map((line,i)=><div key={i}>{line}</div>)}{preview.warnings.length>30&&<small>... e mais {preview.warnings.length-30} linha(s)</small>}</div></details></div>}
+  <div className="import-actions"><button onClick={onClose}>Cancelar</button><button className="primary" onClick={onConfirm}>Confirmar importação</button></div>
+ </div></Modal>;
 }
 function ResidentForm({resident,unit,onClose,onSave}){
  const [f,setF]=useState(()=>resident?{name:resident.name||"",phone:resident.phone||"",block:resident.block||"",street:resident.street||"",quadra:resident.quadra||"",apt:resident.apt||"",relationship:resident.relationship||""}:{name:"",phone:"",block:unit?.block||"",street:unit?.street||"",quadra:unit?.quadra||"",apt:unit?.apt||"",relationship:""});
