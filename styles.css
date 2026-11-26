@@ -562,3 +562,8 @@ nav button.active{
 .bottom-nav-icon{position:relative;display:inline-flex;align-items:center;justify-content:center}
 .bottom-notification-count{position:absolute;top:-9px;right:-14px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#d91c2b;color:#fff;border:2px solid #171613;font-size:10px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;line-height:1;box-shadow:0 1px 5px #0008}
 @media(max-width:700px){.resident-block-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.resident-block-summary{padding:13px}.resident-block-summary-head strong{font-size:24px}}
+.import-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.import-stats>div{border:1px solid #4b4032;background:#191814;border-radius:11px;padding:10px;text-align:center}
+.import-stats b{display:block;font-size:20px;color:var(--gold2)}
+.import-stats span{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+@media(max-width:520px){.import-stats{grid-template-columns:1fr 1fr}.import-stats>div:last-child{grid-column:1/-1}}

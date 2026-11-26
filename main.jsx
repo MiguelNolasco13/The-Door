@@ -17,15 +17,28 @@ function mergeLocalPhotos(cloud,current){const orderPhotos=new Map((current.orde
 function uid(p="id"){return p+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,7)}
 function normalizeEmail(email){return String(email||"").trim().toLowerCase()}
 function normalizeImportText(v){return String(v||"").replace(/\u00a0/g," ").replace(/\s+/g," ").trim();}
+function normalizeResidentKey(r){
+ return [normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt)].join("|");
+}
+function normalizePhoneValue(value){
+ let n=String(value||"").replace(/\D/g,"");
+ if(n.startsWith("55") && (n.length===12 || n.length===13)) n=n.slice(2);
+ return n.length>=10 && n.length<=11 ? n : "";
+}
+function extractPhones(text){
+ const source=String(text||"");
+ const matches=source.match(/(?:\+?55[\s.-]*)?(?:\(\d{2}\)|\d{2})?[\s.-]*(?:9\d{3,4}|\d{4})[\s.-]*\d{4}/g)||[];
+ return [...new Set(matches.map(normalizePhoneValue).filter(Boolean))];
+}
 function parseResidentLine(line){
  const clean=normalizeImportText(line);
  if(!clean||/^CADASTRO MORADORES/i.test(clean)||/^NOME\s+Bloco/i.test(clean)||/^BLOCO\s+\d+\s*$/i.test(clean))return null;
  const m=clean.match(/^(.*?)\s+BLOCO\s+(\d{1,2})\s+([A-Z0-9][A-Z0-9-]{0,7})(?:\s+(.*))?$/i);
  if(!m)return null;
  const name=normalizeImportText(m[1]);
- if(!name||name.length<3||/^BLOCO$/i.test(name)||/^CAIXA$/i.test(name))return null;
+ if(!name||name.length<3||/^BLOCO$/i.test(name)||/^CAIXA(?: ECONÔMICA)?$/i.test(name))return null;
  const rest=normalizeImportText(m[4]||"");
- const phones=(rest.match(/(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?9?\d{4}[-. ]?\d{4}/g)||[]).map(x=>x.replace(/\D/g,"")).filter(x=>x.length>=10);
+ const phones=extractPhones(rest);
  const email=(rest.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)||[])[0]||"";
  const relationshipTerms=["PROPRIETÁRIO","PROPRIETÁRIA","INQUILINO","INQUILINA","ESPOSO","ESPOSA","FILHO","FILHA","MÃE","PAI","IRMÃO","IRMÃ","NETO","NETA","NOIVO","NOIVA","NAMORADO","NAMORADA","SOBRINHO","SOBRINHA","NORA","GENRO","MORADOR","MORADORA","FAMÍLIA","AMIGO","AMIGA"];
  const rel=relationshipTerms.find(term=>new RegExp(`\\b${term.replace(/[ÁÉÍÓÚÃÕÇ]/g,'.')}\\b`,'i').test(rest))||"";
@@ -69,7 +82,42 @@ function parseResidentsCsv(text){
  return {residents,warnings,sourceLines:lines.length-1};
 }
 function dedupeResidents(list){
- const seen=new Set(); return list.filter(r=>{const key=[normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt),String(r.phone||"")].join("|"); if(seen.has(key))return false;seen.add(key);return true;});
+ const map=new Map();
+ list.forEach(r=>{
+  const key=normalizeResidentKey(r);
+  if(!key.replace(/\|/g,""))return;
+  const old=map.get(key);
+  if(!old){map.set(key,{...r,phone:normalizePhoneValue(r.phone)});return;}
+  map.set(key,{...old,phone:old.phone||normalizePhoneValue(r.phone),email:old.email||r.email,relationship:old.relationship||r.relationship});
+ });
+ return [...map.values()];
+}
+function prepareResidentImport(incoming,existing){
+ const existingMap=new Map((existing||[]).map(r=>[normalizeResidentKey(r),r]));
+ const seenIncoming=new Map();
+ const prepared=[];
+ let duplicates=0,updates=0,news=0;
+ for(const raw of incoming||[]){
+  const r={...raw,phone:normalizePhoneValue(raw.phone)};
+  const key=normalizeResidentKey(r);
+  if(seenIncoming.has(key)){
+   duplicates++;
+   const prev=seenIncoming.get(key);
+   if(!prev.phone&&r.phone)prev.phone=r.phone;
+   if(!prev.email&&r.email)prev.email=r.email;
+   if(!prev.relationship&&r.relationship)prev.relationship=r.relationship;
+   continue;
+  }
+  seenIncoming.set(key,r);
+  const old=existingMap.get(key);
+  if(old){
+   const changed=(!old.phone&&r.phone)||(!old.email&&r.email)||(!old.relationship&&r.relationship);
+   if(changed)updates++;
+   else duplicates++;
+   prepared.push({...r,id:old.id,__existing:true,__changed:changed});
+  }else{news++;prepared.push({...r,id:uid("mor"),__existing:false,__changed:false});}
+ }
+ return {prepared,duplicates,updates,news};
 }
 // Integração preparada para leitura inteligente de etiquetas.
 // O endpoint deve receber { image: "data:image/..." } e retornar JSON com, por exemplo:
@@ -434,20 +482,27 @@ function AppContent({user,onLogout}){
   const result=file.name.toLowerCase().endsWith(".pdf")?await extractResidentsFromPdf(file):parseResidentsCsv(await file.text());
   const residents=dedupeResidents(result.residents||[]);
   if(!residents.length){notify("Nenhum morador válido foi encontrado no arquivo.");return;}
+  const prepared=prepareResidentImport(residents,data.residents||[]);
   const blocks={}; residents.forEach(r=>{const key=String(r.block||"Não informado").trim()||"Não informado";blocks[key]=(blocks[key]||0)+1;});
-  setResidentImportPreview({fileName:file.name,residents,warnings:result.warnings||[],sourceLines:result.sourceLines||0,blocks});
+  setResidentImportPreview({fileName:file.name,residents:prepared.prepared,warnings:result.warnings||[],sourceLines:result.sourceLines||0,blocks,news:prepared.news,updates:prepared.updates,duplicates:prepared.duplicates});
  }catch(e){console.error(e);notify("Não foi possível ler o arquivo. Use o PDF original ou um CSV com Nome, Bloco, Apartamento e Contato.");}
 }
 function confirmResidentImport(){
  const preview=residentImportPreview; if(!preview?.residents?.length)return;
- const residents=preview.residents.map(r=>({...r,id:uid("mor")}));
+ const incoming=preview.residents;
  setData(d=>{
-  const existing=new Map(d.residents.map(r=>[[normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt),String(r.phone||"")].join("|"),r]));
+  const byKey=new Map(d.residents.map(r=>[normalizeResidentKey(r),r]));
   const merged=[...d.residents];
-  residents.forEach(r=>{const key=[normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt),String(r.phone||"")].join("|");const old=existing.get(key);if(old){merged[merged.findIndex(x=>x.id===old.id)]={...old,...r,id:old.id};}else merged.push(r);});
+  incoming.forEach(r=>{
+   const key=normalizeResidentKey(r); const old=byKey.get(key);
+   if(old){
+    const idx=merged.findIndex(x=>x.id===old.id);
+    merged[idx]={...old,name:r.name||old.name,block:r.block||old.block,apt:r.apt||old.apt,phone:r.phone||old.phone,email:r.email||old.email,relationship:r.relationship||old.relationship,street:r.street||old.street,quadra:r.quadra||old.quadra};
+   }else{merged.push({...r,id:r.id||uid("mor")});}
+  });
   return {...d,residents:merged};
  });
- setResidentImportPreview(null);setShowResidentImport(false);notify(`${residents.length} moradores confirmados e importados no The Door.`);
+ setResidentImportPreview(null);setShowResidentImport(false);notify(`Importação concluída: ${preview.news||0} novos, ${preview.updates||0} atualizados e ${preview.duplicates||0} já cadastrados.`);
 }
  function addOrder(o){
   const {notificationChoice="later",...orderFields}=o;
@@ -578,7 +633,7 @@ function confirmResidentImport(){
    {tab==="couriers"&&<><SectionTitle icon={<Truck/>} title="Entregadores"/><div className="toolbar"><button className="primary" onClick={()=>setShowCourier(true)}><Plus/> Cadastrar entregador</button></div><div className="cards">{data.couriers.map(c=><div className="card" key={c.id}><b>{c.name}</b><small>{c.company||"Sem empresa"} • {c.phone||"Sem telefone"}</small><small>Documento: {c.doc||"—"} • Placa: {c.plate||"—"}</small></div>)}</div></>}
    {tab==="history"&&<><SectionTitle icon={<History/>} title="Histórico de retiradas"/><OrderList orders={orders.filter(o=>o.status==="Retirada")} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation}/></>}
   </main>
-  <nav className="bottom-nav">{[["home","Início",Home],["pending","Pendências",Clock],["orders","Encomendas",PackagePlus],["correspondence","Cartas",Mail],["menu","Menu",Menu]].map(([k,l,I])=><button className={tab===k?"active":""} onClick={()=>k==="menu"?setMenuOpen(true):setTab(k)} key={k}><span className="bottom-nav-icon"><I/>{k==="menu"&&totalNotificationQueue>0&&<span className="bottom-notification-count">{totalNotificationQueue>99?"99+":totalNotificationQueue}</span>}</span><span>{l}</span></button>)}</nav>
+  <nav className="bottom-nav">{[["home","Início",Home],["pending","Pendências",Clock],["orders","Encomendas",PackagePlus],["correspondence","Cartas",Mail],["menu","Menu",Menu]].map(([k,l,I])=><button className={tab===k?"active":""} onClick={()=>k==="menu"?setMenuOpen(true):setTab(k)} key={k}><span className="bottom-nav-icon"><I/>{k==="pending"&&totalNotificationQueue>0&&<span className="bottom-notification-count">{totalNotificationQueue>99?"99+":totalNotificationQueue}</span>}</span><span>{l}</span></button>)}</nav>
   {menuOpen&&<div className="menu-overlay" onClick={()=>setMenuOpen(false)}><div className="side-menu" onClick={e=>e.stopPropagation()}><div className="side-menu-head"><div><b>Menu</b><small>{tenantName||"Condomínio"}</small></div><button onClick={()=>setMenuOpen(false)}><X/></button></div><button className="menu-notifications" onClick={()=>{setTab("notifications");setMenuOpen(false)}}><MessageSquare/> <span>Avisos</span>{totalNotificationQueue>0&&<span className="notification-count">{totalNotificationQueue>99?"99+":totalNotificationQueue}</span>}</button><button onClick={()=>{setTab("residents");setMenuOpen(false)}}><Users/> Moradores</button><button onClick={()=>{setShowResidentImport(true);setMenuOpen(false)}}><Upload/> Importar moradores</button><button onClick={()=>{setTab("couriers");setMenuOpen(false)}}><Truck/> Entregadores</button><button onClick={()=>{setTab("history");setMenuOpen(false)}}><Clock/> Histórico</button><div className="menu-divider"/><button onClick={onLogout}><LogOut/> Sair</button></div></div>}
   {identifyingOrder&&<IdentifyOrderModal order={identifyingOrder} data={data} onClose={()=>setIdentifyingOrder(null)} onConfirm={confirmIdentification}/>}
   {identifyingCorrespondence&&<IdentifyCorrespondenceModal item={identifyingCorrespondence} data={data} onClose={()=>setIdentifyingCorrespondence(null)} onConfirm={confirmCorrespondenceIdentification}/>}
@@ -717,7 +772,8 @@ function ResidentImportModal({onClose,onImport}){
 function ResidentImportPreview({preview,onClose,onConfirm}){
  const blockEntries=Object.entries(preview.blocks||{}).sort((a,b)=>String(a[0]).localeCompare(String(b[0]),"pt-BR",{numeric:true}));
  return <Modal title="Pré-visualização da importação" onClose={onClose}><div className="form">
-  <div className="import-summary"><div className="import-total"><strong>{preview.residents.length}</strong><span>moradores encontrados</span></div><div className="import-source"><b>{preview.fileName}</b><small>{preview.sourceLines||0} linhas analisadas</small></div></div>
+  <div className="import-summary"><div className="import-total"><strong>{preview.residents.length}</strong><span>moradores válidos</span></div><div className="import-source"><b>{preview.fileName}</b><small>{preview.sourceLines||0} linhas analisadas</small></div></div>
+  <div className="import-stats"><div><b>{preview.news||0}</b><span>novos</span></div><div><b>{preview.updates||0}</b><span>atualizados</span></div><div><b>{preview.duplicates||0}</b><span>já cadastrados</span></div></div>
   <div className="import-blocks"><b>Distribuição por bloco</b>{blockEntries.length?blockEntries.map(([block,count])=><div className="import-block-row" key={block}><span>Bloco {block}</span><strong>{count}</strong></div>):<small>Nenhum bloco identificado.</small>}</div>
   {preview.warnings?.length>0&&<div className="import-warning"><b>⚠ {preview.warnings.length} linha(s) precisam de atenção</b><small>Foram encontradas linhas com observações como “se mudou”, “não mora” ou dados incompletos. Elas não serão gravadas automaticamente.</small><details><summary>Ver linhas ignoradas</summary><div className="import-warning-list">{preview.warnings.slice(0,30).map((line,i)=><div key={i}>{line}</div>)}{preview.warnings.length>30&&<small>... e mais {preview.warnings.length-30} linha(s)</small>}</div></details></div>}
   <div className="import-actions"><button onClick={onClose}>Cancelar</button><button className="primary" onClick={onConfirm}>Confirmar importação</button></div>
