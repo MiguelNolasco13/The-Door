@@ -17,28 +17,15 @@ function mergeLocalPhotos(cloud,current){const orderPhotos=new Map((current.orde
 function uid(p="id"){return p+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,7)}
 function normalizeEmail(email){return String(email||"").trim().toLowerCase()}
 function normalizeImportText(v){return String(v||"").replace(/\u00a0/g," ").replace(/\s+/g," ").trim();}
-function normalizeResidentKey(r){
- return [normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt)].join("|");
-}
-function normalizePhoneValue(value){
- let n=String(value||"").replace(/\D/g,"");
- if(n.startsWith("55") && (n.length===12 || n.length===13)) n=n.slice(2);
- return n.length>=10 && n.length<=11 ? n : "";
-}
-function extractPhones(text){
- const source=String(text||"");
- const matches=source.match(/(?:\+?55[\s.-]*)?(?:\(\d{2}\)|\d{2})?[\s.-]*(?:9\d{3,4}|\d{4})[\s.-]*\d{4}/g)||[];
- return [...new Set(matches.map(normalizePhoneValue).filter(Boolean))];
-}
 function parseResidentLine(line){
  const clean=normalizeImportText(line);
  if(!clean||/^CADASTRO MORADORES/i.test(clean)||/^NOME\s+Bloco/i.test(clean)||/^BLOCO\s+\d+\s*$/i.test(clean))return null;
  const m=clean.match(/^(.*?)\s+BLOCO\s+(\d{1,2})\s+([A-Z0-9][A-Z0-9-]{0,7})(?:\s+(.*))?$/i);
  if(!m)return null;
  const name=normalizeImportText(m[1]);
- if(!name||name.length<3||/^BLOCO$/i.test(name)||/^CAIXA(?: ECONÔMICA)?$/i.test(name))return null;
+ if(!name||name.length<3||/^BLOCO$/i.test(name)||/^CAIXA$/i.test(name))return null;
  const rest=normalizeImportText(m[4]||"");
- const phones=extractPhones(rest);
+ const phones=(rest.match(/(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?9?\d{4}[-. ]?\d{4}/g)||[]).map(x=>x.replace(/\D/g,"")).filter(x=>x.length>=10);
  const email=(rest.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)||[])[0]||"";
  const relationshipTerms=["PROPRIETÁRIO","PROPRIETÁRIA","INQUILINO","INQUILINA","ESPOSO","ESPOSA","FILHO","FILHA","MÃE","PAI","IRMÃO","IRMÃ","NETO","NETA","NOIVO","NOIVA","NAMORADO","NAMORADA","SOBRINHO","SOBRINHA","NORA","GENRO","MORADOR","MORADORA","FAMÍLIA","AMIGO","AMIGA"];
  const rel=relationshipTerms.find(term=>new RegExp(`\\b${term.replace(/[ÁÉÍÓÚÃÕÇ]/g,'.')}\\b`,'i').test(rest))||"";
@@ -82,42 +69,7 @@ function parseResidentsCsv(text){
  return {residents,warnings,sourceLines:lines.length-1};
 }
 function dedupeResidents(list){
- const map=new Map();
- list.forEach(r=>{
-  const key=normalizeResidentKey(r);
-  if(!key.replace(/\|/g,""))return;
-  const old=map.get(key);
-  if(!old){map.set(key,{...r,phone:normalizePhoneValue(r.phone)});return;}
-  map.set(key,{...old,phone:old.phone||normalizePhoneValue(r.phone),email:old.email||r.email,relationship:old.relationship||r.relationship});
- });
- return [...map.values()];
-}
-function prepareResidentImport(incoming,existing){
- const existingMap=new Map((existing||[]).map(r=>[normalizeResidentKey(r),r]));
- const seenIncoming=new Map();
- const prepared=[];
- let duplicates=0,updates=0,news=0;
- for(const raw of incoming||[]){
-  const r={...raw,phone:normalizePhoneValue(raw.phone)};
-  const key=normalizeResidentKey(r);
-  if(seenIncoming.has(key)){
-   duplicates++;
-   const prev=seenIncoming.get(key);
-   if(!prev.phone&&r.phone)prev.phone=r.phone;
-   if(!prev.email&&r.email)prev.email=r.email;
-   if(!prev.relationship&&r.relationship)prev.relationship=r.relationship;
-   continue;
-  }
-  seenIncoming.set(key,r);
-  const old=existingMap.get(key);
-  if(old){
-   const changed=(!old.phone&&r.phone)||(!old.email&&r.email)||(!old.relationship&&r.relationship);
-   if(changed)updates++;
-   else duplicates++;
-   prepared.push({...r,id:old.id,__existing:true,__changed:changed});
-  }else{news++;prepared.push({...r,id:uid("mor"),__existing:false,__changed:false});}
- }
- return {prepared,duplicates,updates,news};
+ const seen=new Set(); return list.filter(r=>{const key=[normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt),String(r.phone||"")].join("|"); if(seen.has(key))return false;seen.add(key);return true;});
 }
 // Integração preparada para leitura inteligente de etiquetas.
 // O endpoint deve receber { image: "data:image/..." } e retornar JSON com, por exemplo:
@@ -145,6 +97,11 @@ function extractTracking(text){
  if(labeled?.[1])return labeled[1];
  const candidates=clean.match(/\b[A-Z]{2}\d{8,12}[A-Z]{2}\b/g)||[];
  return candidates.sort((a,b)=>b.length-a.length)[0]||"";
+}
+function extractInvoice(text){
+ const raw=String(text||"");
+ const labeled=raw.match(/(?:NOTA\s*FISCAL|NF|N[.º°]?\s*FISCAL)[\s:#-]*([0-9]{4,20})/i);
+ return labeled?.[1]||"";
 }
 function normalizeOCRText(value){
  return String(value||"").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Z0-9 ]/g," ").replace(/\s+/g," ").trim();
@@ -277,7 +234,7 @@ async function analyzeLabelWithAI(image){
  const best=await recognizeBestOCR(Tesseract,image);
  const text=best.text||"";
  const unit=extractUnitFromText(text);
- return {tracking:extractTracking(text),carrier:detectCarrier(text),recipientName:"",block:unit.block,apt:unit.apt,ocrText:text,confidence:best.confidence,mode:best.mode};
+ return {tracking:extractTracking(text),invoice:extractInvoice(text),carrier:detectCarrier(text),recipientName:"",block:unit.block,apt:unit.apt,ocrText:text,confidence:best.confidence,mode:best.mode};
 }
 // WhatsApp gratuito: abre uma conversa com texto preenchido; o usuário confirma o envio.
 function phoneForWhatsApp(phone){
@@ -398,7 +355,7 @@ function AppContent({user,onLogout}){
   const r=data.residents.find(x=>x.id===order.residentId);
   if(!r)return null;
   if(kind==="pickup")return `Olá, ${r.name}! Confirmamos que sua encomenda ${order.code} foi retirada na portaria. Obrigado!`;
-  const template=order.customMessage||"Olá, {morador}! Sua encomenda {codigo} está disponível para retirada na portaria. Apresente o QR Code da encomenda ou informe o código {rastreio} ao atendente. Obrigado!";
+  const template=order.customMessage||"Olá, {morador}! Sua encomenda {codigo} está disponível para retirada na portaria. Informe o código {rastreio} ao atendente. Obrigado!";
   return String(template).replaceAll("{morador}",r.name||"morador").replaceAll("{codigo}",order.code||"").replaceAll("{rastreio}",order.tracking||order.code||"");
  }
  function saveEditedNotification(id,message){
@@ -435,8 +392,8 @@ function AppContent({user,onLogout}){
    const matched=match?.resident||null;
    const resolvedBlock=result?.block||unit.block||matched?.block||"";
    const resolvedApt=result?.apt||unit.apt||matched?.apt||"";
-   const enriched={...(result||{}),block:resolvedBlock,apt:resolvedApt,recipientName:result?.recipientName||matched?.name||"",matchedResidentId:matched?.id||"",matchScore:match?.score||0,matchedResidentName:matched?.name||""};
-   setData(d=>({...d,orders:d.orders.map(x=>x.id===order.id?{...x,aiLabel:enriched,identificationStatus:"ready",tracking:enriched.tracking||x.tracking||"",courier:enriched.carrier||x.courier||"",residentId:matched?.id||x.residentId||"",residentName:matched?.name||x.residentName||"",address:matched?`${matched.block||""} / ${matched.apt||""}`:x.address||""}:x)}));
+   const enriched={...(result||{}),block:resolvedBlock,apt:resolvedApt,invoice:result?.invoice||extractInvoice(rawText)||"",recipientName:result?.recipientName||matched?.name||"",matchedResidentId:matched?.id||"",matchScore:match?.score||0,matchedResidentName:matched?.name||""};
+   setData(d=>({...d,orders:d.orders.map(x=>x.id===order.id?{...x,aiLabel:enriched,identificationStatus:"ready",tracking:enriched.tracking||x.tracking||"",invoice:enriched.invoice||x.invoice||"",courier:enriched.carrier||x.courier||"",residentId:matched?.id||x.residentId||"",residentName:matched?.name||x.residentName||"",address:matched?`${matched.block||""} / ${matched.apt||""}`:x.address||""}:x)}));
   }catch(e){
    setData(d=>({...d,orders:d.orders.map(x=>x.id===order.id?{...x,identificationStatus:"error"}:x)}));
   }
@@ -467,11 +424,11 @@ function AppContent({user,onLogout}){
   setIdentifyingCorrespondence(null);
   notify("Correspondência identificada. Agora você pode avisar o morador.");
  }
- function confirmIdentification(order,residentId){
+ function confirmIdentification(order,residentId,manualFields={}){
   const resident=data.residents.find(r=>r.id===residentId);
   if(!resident){notify("Selecione um morador antes de confirmar.");return;}
   const ai=order.aiLabel||{};
-  const updated={...order,residentId,residentName:resident.name,address:`${resident.block||""} / ${resident.apt||""}`,tracking:ai.tracking||order.tracking||"",courier:ai.carrier||order.courier||"",identificationStatus:"identified",identifiedAt:new Date().toISOString()};
+  const updated={...order,residentId,residentName:resident.name,address:`${resident.block||""} / ${resident.apt||""}`,tracking:manualFields.tracking||ai.tracking||order.tracking||"",invoice:manualFields.invoice||ai.invoice||order.invoice||"",courier:ai.carrier||order.courier||"",identificationStatus:"identified",identifiedAt:new Date().toISOString()};
   setData(d=>({...d,orders:d.orders.map(x=>x.id===order.id?updated:x)}));
   setIdentifyingOrder(null);
   setTab("orders");
@@ -482,27 +439,20 @@ function AppContent({user,onLogout}){
   const result=file.name.toLowerCase().endsWith(".pdf")?await extractResidentsFromPdf(file):parseResidentsCsv(await file.text());
   const residents=dedupeResidents(result.residents||[]);
   if(!residents.length){notify("Nenhum morador válido foi encontrado no arquivo.");return;}
-  const prepared=prepareResidentImport(residents,data.residents||[]);
   const blocks={}; residents.forEach(r=>{const key=String(r.block||"Não informado").trim()||"Não informado";blocks[key]=(blocks[key]||0)+1;});
-  setResidentImportPreview({fileName:file.name,residents:prepared.prepared,warnings:result.warnings||[],sourceLines:result.sourceLines||0,blocks,news:prepared.news,updates:prepared.updates,duplicates:prepared.duplicates});
+  setResidentImportPreview({fileName:file.name,residents,warnings:result.warnings||[],sourceLines:result.sourceLines||0,blocks});
  }catch(e){console.error(e);notify("Não foi possível ler o arquivo. Use o PDF original ou um CSV com Nome, Bloco, Apartamento e Contato.");}
 }
 function confirmResidentImport(){
  const preview=residentImportPreview; if(!preview?.residents?.length)return;
- const incoming=preview.residents;
+ const residents=preview.residents.map(r=>({...r,id:uid("mor")}));
  setData(d=>{
-  const byKey=new Map(d.residents.map(r=>[normalizeResidentKey(r),r]));
+  const existing=new Map(d.residents.map(r=>[[normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt)].join("|"),r]));
   const merged=[...d.residents];
-  incoming.forEach(r=>{
-   const key=normalizeResidentKey(r); const old=byKey.get(key);
-   if(old){
-    const idx=merged.findIndex(x=>x.id===old.id);
-    merged[idx]={...old,name:r.name||old.name,block:r.block||old.block,apt:r.apt||old.apt,phone:r.phone||old.phone,email:r.email||old.email,relationship:r.relationship||old.relationship,street:r.street||old.street,quadra:r.quadra||old.quadra};
-   }else{merged.push({...r,id:r.id||uid("mor")});}
-  });
+  residents.forEach(r=>{const key=[normalizeOCRText(r.name),normalizeOCRText(r.block),normalizeOCRText(r.apt)].join("|");const old=existing.get(key);if(old){merged[merged.findIndex(x=>x.id===old.id)]={...old,...r,id:old.id,phone:r.phone||old.phone||""};}else merged.push(r);});
   return {...d,residents:merged};
  });
- setResidentImportPreview(null);setShowResidentImport(false);notify(`Importação concluída: ${preview.news||0} novos, ${preview.updates||0} atualizados e ${preview.duplicates||0} já cadastrados.`);
+ setResidentImportPreview(null);setShowResidentImport(false);notify(`${residents.length} moradores confirmados e importados no The Door.`);
 }
  function addOrder(o){
   const {notificationChoice="later",...orderFields}=o;
@@ -601,18 +551,8 @@ function confirmResidentImport(){
   async function sendWhatsApp(o){
   const r=data.residents.find(x=>x.id===o.residentId);
   if(!r){notify("Cadastre ou vincule um morador para enviar a mensagem.");return}
-  const msg=`Olá, ${r.name}! Sua encomenda ${o.code} está disponível para retirada na portaria. Apresente o QR Code desta encomenda ou informe o código ${o.tracking||o.code} ao atendente. Obrigado!`;
-  try{
-   const qrData=await QRCode.toDataURL(o.code,{width:520,margin:2,errorCorrectionLevel:"M"});
-   const blob=await (await fetch(qrData)).blob();
-   const file=new File([blob],`The-Door-${o.code}.png`,{type:"image/png"});
-   if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
-    await navigator.share({files:[file],title:`The Door - ${o.code}`,text:msg});
-    notify("Comunicado preparado com QR Code e mensagem. Confirme o envio no WhatsApp.");
-    return;
-   }
-  }catch(e){}
-  // Fallback: quando o navegador não permite compartilhar arquivo, abre o WhatsApp com a mensagem.
+  const msg=notificationMessage(o);
+  if(!msg){notify("Não foi possível montar a mensagem para este morador.");return}
   openWhatsApp(r.phone,msg);
  }
   function sendPickupConfirmation(o,method){setPickupReceiptOrders([{...o,pickupMethod:method||o.pickupMethod||"manual"}]);}
@@ -626,14 +566,14 @@ function confirmResidentImport(){
   <main>
    {tab==="pending"&&<PendingIdentification data={data} onOpen={setIdentifyingOrder} onAnalyze={analyzePendingOrder}/>}
    {tab==="home"&&<Dashboard pending={pending} orders={orders} onAdd={()=>setShowAdd(true)} onScan={()=>setScan(true)} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder}/>}
-   {tab==="orders"&&<><SectionTitle icon={<History/>} title="Encomendas"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar código, morador, apartamento..."/></div><button className="primary" onClick={()=>setShowAdd(true)}><Plus/> Nova encomenda</button></div><div className="bulk-bar"><div><b>{selectedOrderIds.length} selecionada(s)</b><small>Use a seleção para dar baixa em várias encomendas de uma vez.</small></div><div className="bulk-actions"><button onClick={selectAllPending}>Selecionar pendentes</button><button onClick={clearOrderSelection} disabled={!selectedOrderIds.length}>Limpar</button><button className="primary" onClick={()=>bulkDeliver()} disabled={!selectedOrderIds.length}><CheckCircle2/> Dar baixa em lote</button></div></div><OrderList orders={filtered} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation} selectable selectedIds={selectedOrderIds} onToggleSelect={toggleOrderSelection}/></>}
+   {tab==="orders"&&<><SectionTitle icon={<History/>} title="Encomendas"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar código, rastreio, nota fiscal, morador ou apartamento..."/></div><button className="primary" onClick={()=>setShowAdd(true)}><Plus/> Nova encomenda</button></div><div className="bulk-bar"><div><b>{selectedOrderIds.length} selecionada(s)</b><small>Use a seleção para dar baixa em várias encomendas de uma vez.</small></div><div className="bulk-actions"><button onClick={selectAllPending}>Selecionar pendentes</button><button onClick={clearOrderSelection} disabled={!selectedOrderIds.length}>Limpar</button><button className="primary" onClick={()=>bulkDeliver()} disabled={!selectedOrderIds.length}><CheckCircle2/> Dar baixa em lote</button></div></div><OrderList orders={filtered} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation} selectable selectedIds={selectedOrderIds} onToggleSelect={toggleOrderSelection}/></>}
    {tab==="correspondence"&&<><SectionTitle icon={<Mail/>} title="Cartas e correspondências"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar morador, remetente, código ou tipo..."/></div><button className="primary" onClick={()=>setShowCorrespondence(true)}><Plus/> Nova correspondência</button></div><PendingCorrespondence data={data} onOpen={setIdentifyingCorrespondence} onAnalyze={analyzePendingCorrespondence}/><div className="section-title" style={{marginTop:20}}><History/><h2>Histórico</h2></div>{data.correspondences.filter(c=>c.status!=="Pendente"&&JSON.stringify(c).toLowerCase().includes(query.toLowerCase())).length===0?<div className="empty">Nenhuma correspondência identificada ainda.</div>:<div className="cards">{data.correspondences.filter(c=>c.status!=="Pendente"&&JSON.stringify(c).toLowerCase().includes(query.toLowerCase())).map(c=>{const r=data.residents.find(x=>x.id===c.residentId);return <div className="card order" key={c.id}>{c.photo&&<img className="order-photo" src={c.photo} alt="Correspondência" style={{width:88,height:88,objectFit:"cover",borderRadius:10,flexShrink:0}}/>}<div className="order-main"><div className="code">{c.type||"Correspondência"}</div><b>{r?.name||c.residentName||"Morador não vinculado"}</b><small>{r?`Bloco ${r.block||"—"} • Apto ${r.apt||"—"}`:c.address||"Unidade não informada"}</small><small>Remetente: {c.sender||"Não informado"}</small>{c.tracking&&<small>Código: {c.tracking}</small>}{c.carrier&&<small>Transportadora: {c.carrier}</small>}<small>Recebida: {new Date(c.receivedAt).toLocaleString("pt-BR")}</small><span className={c.status==="Entregue"?"badge done":"badge"}>{c.status}</span></div><div className="order-actions"><button title="Enviar aviso pelo WhatsApp" onClick={()=>setSharingCorrespondence(c)}><Send/></button>{c.status!=="Entregue"&&<button className="ok" title="Marcar como entregue" onClick={()=>deliverCorrespondence(c.id)}><CheckCircle2/></button>}<button className="danger" title="Excluir" onClick={()=>removeCorrespondence(c.id)}><Trash2/></button></div></div>})}</div>}</>}
-   {tab==="residents"&&<><SectionTitle icon={<Users/>} title="Moradores por unidade"/><div className="resident-block-summary card"><div className="resident-block-summary-head"><div><b>Moradores por bloco</b><small>Quantidade de moradores cadastrados no The Door</small></div><strong>{data.residents.length}</strong></div>{residentsByBlock.length===0?<div className="resident-block-empty">Nenhum morador cadastrado ainda.</div>:<div className="resident-block-grid">{residentsByBlock.map(b=><div className="resident-block-item" key={b.key}><span>{b.label}</span><b>{b.count}</b><small>{b.count===1?"morador":"moradores"}</small></div>)}</div>}</div><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar nome, telefone, bloco ou apartamento..."/></div><button className="primary" onClick={()=>{setResidentEdit(null);setResidentUnit(null);setShowResident(true)}}><Plus/> Cadastrar morador</button></div><div className="unit-list">{Object.entries(data.residents.filter(r=>JSON.stringify(r).toLowerCase().includes(query.toLowerCase())).reduce((groups,r)=>{const key=[r.block,r.street,r.quadra,r.apt].map(v=>(v||"").trim().toLowerCase()).join("|");if(!groups[key])groups[key]={key,block:r.block,street:r.street,quadra:r.quadra,apt:r.apt,residents:[]};groups[key].residents.push(r);return groups;},{})).sort((a,b)=>`${a[1].street} ${a[1].quadra} ${a[1].block} ${a[1].apt}`.localeCompare(`${b[1].street} ${b[1].quadra} ${b[1].block} ${b[1].apt}`,"pt-BR")).map(([key,u])=><div className="card unit-card" key={key}><div className="unit-heading"><div className="unit-icon"><MapPin/></div><div className="unit-title"><b>Unidade {u.apt||"não informada"}</b><small>{[u.block&&`Bloco ${u.block}`,u.street,u.quadra&&`Quadra ${u.quadra}`].filter(Boolean).join(" • ")||"Endereço não informado"}</small><small>{u.residents.length} morador(es) cadastrado(s)</small></div><button className="unit-add" onClick={()=>{setResidentEdit(null);setResidentUnit(u);setShowResident(true)}}><UserPlus/> Adicionar</button></div><div className="unit-residents">{u.residents.map(r=><div className="resident-row" key={r.id}><div className="resident-info"><b>{r.name}</b><small>{r.relationship?`Vínculo: ${r.relationship} • `:""}WhatsApp: {r.phone||"Não informado"}</small></div><div className="resident-actions"><button className="edit-resident" title="Editar morador" onClick={()=>{setResidentEdit(r);setResidentUnit(null);setShowResident(true)}}><Pencil/> Editar</button><button className="delete-resident" title="Excluir morador" onClick={()=>removeResident(r.id)}><Trash2/> Excluir</button></div></div>)}</div></div>)}</div>{data.residents.length===0&&<div className="empty">Nenhum morador cadastrado. Use “Cadastrar morador” para começar.</div>}</>}
+   {tab==="residents"&&<><SectionTitle icon={<Users/>} title="Moradores por unidade"/><div className="resident-block-summary card"><div className="resident-block-summary-head"><div><b>Moradores por bloco</b><small>Quantidade de moradores cadastrados no The Door</small></div><strong>{data.residents.length}</strong></div>{residentsByBlock.length===0?<div className="resident-block-empty">Nenhum morador cadastrado ainda.</div>:<div className="resident-block-grid">{residentsByBlock.map(b=><div className="resident-block-item" key={b.key}><span>{b.label}</span><b>{b.count}</b><small>{b.count===1?"morador":"moradores"}</small></div>)}</div>}</div><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar nome, telefone, bloco ou apartamento..."/></div><button className="primary" onClick={()=>{setResidentEdit(null);setResidentUnit(null);setShowResident(true)}}><Plus/> Cadastrar morador</button></div><div className="unit-list">{Object.entries(data.residents.filter(r=>JSON.stringify(r).toLowerCase().includes(query.toLowerCase())).reduce((groups,r)=>{const key=[r.block,r.street,r.quadra,r.apt].map(v=>(v||"").trim().toLowerCase()).join("|");if(!groups[key])groups[key]={key,block:r.block,street:r.street,quadra:r.quadra,apt:r.apt,residents:[]};groups[key].residents.push(r);return groups;},{})).sort((a,b)=>{const ab=Number(String(a[1].block||"").match(/\d+/)?.[0]||9999),bb=Number(String(b[1].block||"").match(/\d+/)?.[0]||9999);if(ab!==bb)return ab-bb;const aa=Number(String(a[1].apt||"").match(/\d+/)?.[0]||9999),ba=Number(String(b[1].apt||"").match(/\d+/)?.[0]||9999);return aa-ba;}).map(([key,u])=><div className="card unit-card" key={key}><div className="unit-heading"><div className="unit-icon"><MapPin/></div><div className="unit-title"><b>Unidade {u.apt||"não informada"}</b><small>{[u.block&&`Bloco ${u.block}`,u.street,u.quadra&&`Quadra ${u.quadra}`].filter(Boolean).join(" • ")||"Endereço não informado"}</small><small>{u.residents.length} morador(es) cadastrado(s)</small></div><button className="unit-add" onClick={()=>{setResidentEdit(null);setResidentUnit(u);setShowResident(true)}}><UserPlus/> Adicionar</button></div><div className="unit-residents">{u.residents.map(r=><div className="resident-row" key={r.id}><div className="resident-info"><b>{r.name}</b><small>{r.relationship?`Vínculo: ${r.relationship} • `:""}WhatsApp: {r.phone||"Não informado"}</small></div><div className="resident-actions"><button className="edit-resident" title="Editar morador" onClick={()=>{setResidentEdit(r);setResidentUnit(null);setShowResident(true)}}><Pencil/> Editar</button><button className="delete-resident" title="Excluir morador" onClick={()=>removeResident(r.id)}><Trash2/> Excluir</button></div></div>)}</div></div>)}</div>{data.residents.length===0&&<div className="empty">Nenhum morador cadastrado. Use “Cadastrar morador” para começar.</div>}</>}
    {tab==="notifications"&&<><SectionTitle icon={<MessageSquare/>} title="Central de Notificações"/><div className="notification-intro card"><b>{totalNotificationQueue} aviso(s) aguardando envio</b><small>Encomendas e correspondências identificadas aparecem aqui. O The Door agrupa encomendas por morador e permite editar a mensagem antes de abrir o WhatsApp.</small></div>{totalNotificationQueue===0?<div className="empty">Nenhum aviso pendente. Quando uma encomenda ou correspondência estiver pronta para avisar, ela aparecerá aqui.</div>:<><div className="section-title" style={{marginTop:16}}><PackagePlus/><h2>Encomendas</h2></div>{notificationQueue.length===0?<div className="empty">Nenhuma encomenda aguardando aviso.</div>:<div className="cards">{notificationGroups().map(group=>{const r=data.residents.find(x=>x.id===group[0].residentId);return <div className="card notification-card" key={group[0].residentId||group[0].id}><div className="order-main"><div className="code">{group.length} encomenda{group.length===1?"":"s"}</div><b>{r?.name||group[0].residentName||"Morador não vinculado"}</b><small>{r?`Bloco ${r.block||"—"} • Apto ${r.apt||"—"}`:group[0].address||"Unidade não informada"}</small><small>{group.map(o=>o.code).join(" • ")}</small><span className="badge">Aviso pendente</span></div><div className="notification-actions"><button onClick={()=>setEditingNotification(group[0])} title="Editar mensagem">Editar mensagem</button><button className="primary" onClick={()=>openGroupedNotification(group)}><Send size={16}/> Enviar {group.length===1?"aviso":"os avisos"}</button><button onClick={()=>{if(confirm(`Confirma que a mensagem de ${group.length} encomenda(s) foi enviada pelo WhatsApp?`))markNotificationGroupSent(group)}}><CheckCircle2 size={16}/> Marcar enviado</button></div></div>})}</div>}<div className="section-title" style={{marginTop:24}}><Mail/><h2>Correspondências</h2></div>{correspondenceNotificationQueue.length===0?<div className="empty">Nenhuma correspondência aguardando aviso.</div>:<div className="cards">{correspondenceNotificationQueue.map(c=>{const r=data.residents.find(x=>x.id===c.residentId);return <div className="card notification-card" key={c.id}><div className="order-main">{c.photo&&<img className="order-photo" src={c.photo} alt="Correspondência" style={{width:64,height:64,objectFit:"cover",borderRadius:10,flexShrink:0}}/>}<div className="code">{c.type||"Correspondência"}</div><b>{r?.name||c.residentName||"Morador não vinculado"}</b><small>{r?`Bloco ${r.block||"—"} • Apto ${r.apt||"—"}`:c.address||"Unidade não informada"}</small>{c.sender&&<small>Remetente: {c.sender}</small>}{c.tracking&&<small>Código: {c.tracking}</small>}<span className="badge">Aviso pendente</span></div><div className="notification-actions"><button onClick={()=>setEditingCorrespondenceNotification(c)} title="Editar mensagem">Editar mensagem</button><button className="primary" onClick={()=>openCorrespondenceNotification(c)}><Send size={16}/> Enviar aviso</button><button onClick={()=>{if(confirm("Confirma que a mensagem desta correspondência foi enviada pelo WhatsApp?"))markCorrespondenceNotificationSent(c.id)}}><CheckCircle2 size={16}/> Marcar enviado</button></div></div>})}</div>}</>}</>}
    {tab==="couriers"&&<><SectionTitle icon={<Truck/>} title="Entregadores"/><div className="toolbar"><button className="primary" onClick={()=>setShowCourier(true)}><Plus/> Cadastrar entregador</button></div><div className="cards">{data.couriers.map(c=><div className="card" key={c.id}><b>{c.name}</b><small>{c.company||"Sem empresa"} • {c.phone||"Sem telefone"}</small><small>Documento: {c.doc||"—"} • Placa: {c.plate||"—"}</small></div>)}</div></>}
-   {tab==="history"&&<><SectionTitle icon={<History/>} title="Histórico de retiradas"/><OrderList orders={orders.filter(o=>o.status==="Retirada")} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation}/></>}
+   {tab==="history"&&<><SectionTitle icon={<History/>} title="Histórico de retiradas"/><div className="toolbar"><div className="search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar código The Door, rastreio, nota fiscal, morador ou apartamento..."/></div></div><OrderList orders={orders.filter(o=>o.status==="Retirada"&&JSON.stringify(o).toLowerCase().includes(query.toLowerCase()))} data={data} onWhats={sendWhatsApp} onDeliver={deliver} onDelete={removeOrder} onShowQr={setQrOrder} onConfirmPickup={sendPickupConfirmation}/></>}
   </main>
-  <nav className="bottom-nav">{[["home","Início",Home],["pending","Pendências",Clock],["orders","Encomendas",PackagePlus],["correspondence","Cartas",Mail],["menu","Menu",Menu]].map(([k,l,I])=><button className={tab===k?"active":""} onClick={()=>k==="menu"?setMenuOpen(true):setTab(k)} key={k}><span className="bottom-nav-icon"><I/>{k==="pending"&&totalNotificationQueue>0&&<span className="bottom-notification-count">{totalNotificationQueue>99?"99+":totalNotificationQueue}</span>}</span><span>{l}</span></button>)}</nav>
+  <nav className="bottom-nav">{[["home","Início",Home],["pending","Pendências",Clock],["orders","Encomendas",PackagePlus],["correspondence","Cartas",Mail],["menu","Menu",Menu]].map(([k,l,I])=><button className={tab===k?"active":""} onClick={()=>k==="menu"?setMenuOpen(true):setTab(k)} key={k}><span className="bottom-nav-icon"><I/>{k==="menu"&&totalNotificationQueue>0&&<span className="bottom-notification-count">{totalNotificationQueue>99?"99+":totalNotificationQueue}</span>}</span><span>{l}</span></button>)}</nav>
   {menuOpen&&<div className="menu-overlay" onClick={()=>setMenuOpen(false)}><div className="side-menu" onClick={e=>e.stopPropagation()}><div className="side-menu-head"><div><b>Menu</b><small>{tenantName||"Condomínio"}</small></div><button onClick={()=>setMenuOpen(false)}><X/></button></div><button className="menu-notifications" onClick={()=>{setTab("notifications");setMenuOpen(false)}}><MessageSquare/> <span>Avisos</span>{totalNotificationQueue>0&&<span className="notification-count">{totalNotificationQueue>99?"99+":totalNotificationQueue}</span>}</button><button onClick={()=>{setTab("residents");setMenuOpen(false)}}><Users/> Moradores</button><button onClick={()=>{setShowResidentImport(true);setMenuOpen(false)}}><Upload/> Importar moradores</button><button onClick={()=>{setTab("couriers");setMenuOpen(false)}}><Truck/> Entregadores</button><button onClick={()=>{setTab("history");setMenuOpen(false)}}><Clock/> Histórico</button><div className="menu-divider"/><button onClick={onLogout}><LogOut/> Sair</button></div></div>}
   {identifyingOrder&&<IdentifyOrderModal order={identifyingOrder} data={data} onClose={()=>setIdentifyingOrder(null)} onConfirm={confirmIdentification}/>}
   {identifyingCorrespondence&&<IdentifyCorrespondenceModal item={identifyingCorrespondence} data={data} onClose={()=>setIdentifyingCorrespondence(null)} onConfirm={confirmCorrespondenceIdentification}/>}
@@ -664,7 +604,7 @@ function OrderList({orders,data,onWhats,onDeliver,onDelete,onShowQr,onConfirmPic
  return <div className="cards">{orders.map(o=><OrderCard key={o.id} o={o} data={data} onWhats={onWhats} onDeliver={onDeliver} onDelete={onDelete} onShowQr={onShowQr} onConfirmPickup={onConfirmPickup} selectable={selectable} selected={selectedIds.includes(o.id)} onToggleSelect={onToggleSelect}/>)}</div>
 }
 function OrderCard({o,data,onWhats,onDeliver,onDelete,onShowQr,onConfirmPickup,selectable=false,selected=false,onToggleSelect}){
- const resident=data?.residents?.find(r=>r.id===o.residentId); return <div className={`card order${selected?" selected-order":""}`}>{selectable&&o.status==="Pendente"&&<label className="order-select" title="Selecionar encomenda"><input type="checkbox" checked={selected} onChange={()=>onToggleSelect(o.id)}/></label>}{o.photo&&<img className="order-photo" src={o.photo} alt="Foto da encomenda" style={{width:88,height:88,objectFit:"cover",borderRadius:10,flexShrink:0}}/>}<div className="order-main"><div className="code">Código The Door: {o.code}</div>{o.tracking&&<small>Código de barras/rastreio: {o.tracking}</small>}<b>{resident?.name||o.residentName||"Morador"}</b><small>{resident?`${resident.block} • Apto ${resident.apt} • ${resident.street} • ${resident.quadra}`:o.address}</small><small>Recebida: {new Date(o.receivedAt).toLocaleString("pt-BR")}</small><span className={o.status==="Retirada"?"badge done":"badge"}>{o.status}</span></div><div className="order-actions">{onShowQr&&<button title="Ver QR Code próprio" onClick={()=>onShowQr(o)}><ScanLine/></button>}{o.status==="Pendente"&&<button title="WhatsApp" onClick={()=>onWhats(o)}><Send/></button>}{o.status==="Retirada"&&onConfirmPickup&&<button title="Enviar confirmação de retirada pelo WhatsApp" onClick={()=>onConfirmPickup(o,o.pickupMethod||"código de barras")}><Send/></button>}{o.status==="Pendente"&&<button className="ok" title="Dar baixa manual" onClick={()=>onDeliver(o.id)}><CheckCircle2/></button>}<button className="danger" title="Excluir" onClick={()=>onDelete(o.id)}><Trash2/></button></div></div>
+ const resident=data?.residents?.find(r=>r.id===o.residentId); return <div className={`card order${selected?" selected-order":""}`}>{selectable&&o.status==="Pendente"&&<label className="order-select" title="Selecionar encomenda"><input type="checkbox" checked={selected} onChange={()=>onToggleSelect(o.id)}/></label>}{o.photo&&<img className="order-photo" src={o.photo} alt="Foto da encomenda" title="Toque para ampliar" onClick={()=>window.open(o.photo,"_blank")} style={{width:88,height:88,objectFit:"cover",borderRadius:10,flexShrink:0,cursor:"zoom-in"}}/>}<div className="order-main"><div className="code">Código The Door: {o.code}</div>{o.tracking&&<small>Código de barras/rastreio: {o.tracking}</small>}{o.invoice&&<small>Nota fiscal: {o.invoice}</small>}<b>{resident?.name||o.residentName||"Morador"}</b><small>{resident?`${resident.block} • Apto ${resident.apt} • ${resident.street} • ${resident.quadra}`:o.address}</small><small>Recebida: {new Date(o.receivedAt).toLocaleString("pt-BR")}</small><span className={o.status==="Retirada"?"badge done":"badge"}>{o.status}</span></div><div className="order-actions">{onShowQr&&<button title="Ver QR Code próprio" onClick={()=>onShowQr(o)}><ScanLine/></button>}{o.status==="Pendente"&&<button title="WhatsApp" onClick={()=>onWhats(o)}><Send/></button>}{o.status==="Retirada"&&onConfirmPickup&&<button title="Enviar confirmação de retirada pelo WhatsApp" onClick={()=>onConfirmPickup(o,o.pickupMethod||"código de barras")}><Send/></button>}{o.status==="Pendente"&&<button className="ok" title="Dar baixa manual" onClick={()=>onDeliver(o.id)}><CheckCircle2/></button>}<button className="danger" title="Excluir" onClick={()=>onDelete(o.id)}><Trash2/></button></div></div>
 }
 function Modal({title,children,onClose}){return <div className="overlay"><div className="modal"><div className="modalhead"><h3>{title}</h3><button onClick={onClose}>×</button></div>{children}</div></div>}
 function AddOrder({data,onClose,onSave}){
@@ -682,7 +622,7 @@ function AddOrder({data,onClose,onSave}){
  function save(){
   if(!photo){setError("Tire a foto da etiqueta para receber a encomenda.");return}
   setBusy(true);
-  onSave({residentId:"",courier:"",tracking:"",description:"",observations:"",notificationChoice:"later",messageTemplate:"Olá, {morador}! Sua encomenda {codigo} está disponível para retirada na portaria. Apresente o QR Code desta encomenda ou informe o código {rastreio} ao atendente. Obrigado!",photo,residentName:"",address:"",identificationStatus:"pending"});
+  onSave({residentId:"",courier:"",tracking:"",description:"",observations:"",notificationChoice:"later",messageTemplate:"Olá, {morador}! Sua encomenda {codigo} está disponível para retirada na portaria. Informe o código {rastreio} ao atendente. Obrigado!",photo,residentName:"",address:"",identificationStatus:"pending"});
   setBusy(false);
  }
  return <Modal title="Receber encomenda" onClose={onClose}><div className="form">
@@ -704,15 +644,17 @@ function PendingIdentification({data,onOpen,onAnalyze}){
    Promise.resolve(onAnalyze(target)).finally(()=>setRunning(v=>{const n={...v};delete n[target.id];return n;}));
   }
  },[pending.map(o=>o.id+o.identificationStatus+!!o.aiLabel).join("|")]);
- return <><SectionTitle icon={<Clock/>} title="Pendências"/><p className="hint">As fotos entram aqui automaticamente. A leitura da etiqueta acontece sem precisar preencher o cadastro manualmente.</p>{pending.length===0?<div className="empty">Nenhuma encomenda aguardando identificação.</div>:<div className="cards">{pending.map(o=>{const ai=o.aiLabel||{};const resident=data.residents.find(r=>r.id===o.residentId);return <div className="card pending-identification" key={o.id}>{o.photo&&<img className="order-photo" src={o.photo} alt="Etiqueta" style={{width:120,height:120,objectFit:"cover",borderRadius:10}}/>}<div className="order-main"><div className="code">{o.code}</div><b>{ai.matchedResidentName||o.residentName||"Destinatário ainda não confirmado"}</b><small>{ai.tracking||o.tracking?`Rastreio: ${ai.tracking||o.tracking}`:"Rastreio: aguardando leitura"}</small><small>{ai.carrier||o.courier?`Transportadora: ${ai.carrier||o.courier}`:"Transportadora: aguardando leitura"}</small><small>{ai.block||resident?.block?`Bloco: ${ai.block||resident?.block}`:"Bloco: aguardando"} • {ai.apt||resident?.apt?`Apto: ${ai.apt||resident?.apt}`:"Apto: aguardando"}</small><span className="badge">{o.identificationStatus==="reading"||running[o.id]?"IA lendo etiqueta...":"Pronto para identificação"}</span></div><div className="order-actions"><button className="primary" onClick={()=>onOpen(o)} disabled={o.identificationStatus==="reading"}>Identificar encomenda</button></div></div>})}</div>}</>
+ return <><SectionTitle icon={<Clock/>} title="Pendências"/><p className="hint">As fotos entram aqui automaticamente. A leitura da etiqueta acontece sem precisar preencher o cadastro manualmente.</p>{pending.length===0?<div className="empty">Nenhuma encomenda aguardando identificação.</div>:<div className="cards">{pending.map(o=>{const ai=o.aiLabel||{};const resident=data.residents.find(r=>r.id===o.residentId);return <div className="card pending-identification" key={o.id}>{o.photo&&<img className="order-photo" src={o.photo} alt="Etiqueta" title="Toque para ampliar" onClick={()=>window.open(o.photo,"_blank")} style={{width:120,height:120,objectFit:"cover",borderRadius:10,cursor:"zoom-in"}}/>}<div className="order-main"><div className="code">{o.code}</div><b>{ai.matchedResidentName||o.residentName||"Destinatário ainda não confirmado"}</b><small>{ai.tracking||o.tracking?`Rastreio: ${ai.tracking||o.tracking}`:"Rastreio: aguardando leitura"}</small>{(ai.invoice||o.invoice)&&<small>Nota fiscal: {ai.invoice||o.invoice}</small>}<small>{ai.carrier||o.courier?`Transportadora: ${ai.carrier||o.courier}`:"Transportadora: aguardando leitura"}</small><small>{ai.block||resident?.block?`Bloco: ${ai.block||resident?.block}`:"Bloco: aguardando"} • {ai.apt||resident?.apt?`Apto: ${ai.apt||resident?.apt}`:"Apto: aguardando"}</small><span className="badge">{o.identificationStatus==="reading"||running[o.id]?"IA lendo etiqueta...":"Pronto para identificação"}</span></div><div className="order-actions"><button className="primary" onClick={()=>onOpen(o)} disabled={o.identificationStatus==="reading"}>Identificar encomenda</button></div></div>})}</div>}</>
 }
 
 function IdentifyOrderModal({order,data,onClose,onConfirm}){
  const [selected,setSelected]=useState(order.residentId||order.aiLabel?.matchedResidentId||"");
+ const [tracking,setTracking]=useState(order.aiLabel?.tracking||order.tracking||"");
+ const [invoice,setInvoice]=useState(order.aiLabel?.invoice||order.invoice||"");
  const ai=order.aiLabel||{};
  const ranked=data.residents.map(r=>({r,score:scoreResidentAgainstLabel(r,ai.ocrText||ai.recipientName||order.residentName||"")})).sort((a,b)=>b.score-a.score).slice(0,5);
  const current=data.residents.find(r=>r.id===selected);
- return <Modal title="Identificar encomenda" onClose={onClose}><div className="form">{order.photo&&<img className="identify-photo" src={order.photo} alt="Etiqueta"/>}<div className="ai-label-result"><b>Leitura da etiqueta</b><small>Destinatário: <strong>{ai.matchedResidentName||ai.recipientName||"Não identificado"}</strong></small><small>Bloco: <strong>{ai.block||"Não identificado"}</strong></small><small>Apartamento: <strong>{ai.apt||"Não identificado"}</strong></small><small>Rastreio: <strong>{ai.tracking||order.tracking||"Não identificado"}</strong></small><small>Transportadora: <strong>{ai.carrier||order.courier||"Não identificada"}</strong></small></div><label>Escolha o morador<select value={selected} onChange={e=>setSelected(e.target.value)}><option value="">Selecione...</option>{ranked.map(({r,score})=><option key={r.id} value={r.id}>{r.block}/{r.apt} · {r.name} — {Math.round(score*100)}%</option>)}</select></label>{current&&<div className="ai-confirm">✓ {current.name} — Bloco {current.block}, Apto {current.apt}</div>}<button className="primary wide" disabled={!selected} onClick={()=>onConfirm(order,selected)}>Confirmar identificação e enviar ao morador</button></div></Modal>
+ return <Modal title="Identificar encomenda" onClose={onClose}><div className="form">{order.photo&&<img className="identify-photo" src={order.photo} alt="Etiqueta" title="Toque para ampliar" onClick={()=>window.open(order.photo,"_blank")} style={{cursor:"zoom-in"}}/>}<div className="ai-label-result"><b>Leitura da etiqueta</b><small>Destinatário: <strong>{ai.matchedResidentName||ai.recipientName||"Não identificado"}</strong></small><small>Bloco: <strong>{ai.block||"Não identificado"}</strong></small><small>Apartamento: <strong>{ai.apt||"Não identificado"}</strong></small><small>Rastreio: <strong>{tracking||"Não identificado"}</strong></small><small>Nota fiscal: <strong>{invoice||"Não identificada"}</strong></small><small>Transportadora: <strong>{ai.carrier||order.courier||"Não identificada"}</strong></small></div><label>Código de rastreio<input value={tracking} onChange={e=>setTracking(e.target.value)} placeholder="Código de rastreio"/></label><label>Nota fiscal<input value={invoice} onChange={e=>setInvoice(e.target.value)} placeholder="Número da nota fiscal"/></label><label>Escolha o morador<select value={selected} onChange={e=>setSelected(e.target.value)}><option value="">Selecione...</option>{ranked.map(({r,score})=><option key={r.id} value={r.id}>{r.block}/{r.apt} · {r.name} — {Math.round(score*100)}%</option>)}</select></label>{current&&<div className="ai-confirm">✓ {current.name} — Bloco {current.block}, Apto {current.apt}</div>}<button className="primary wide" disabled={!selected} onClick={()=>onConfirm(order,selected,{tracking,invoice})}>Confirmar identificação</button></div></Modal>
 }
 
 function EditNotification({order,resident,initialMessage,onClose,onSave}){
@@ -772,8 +714,7 @@ function ResidentImportModal({onClose,onImport}){
 function ResidentImportPreview({preview,onClose,onConfirm}){
  const blockEntries=Object.entries(preview.blocks||{}).sort((a,b)=>String(a[0]).localeCompare(String(b[0]),"pt-BR",{numeric:true}));
  return <Modal title="Pré-visualização da importação" onClose={onClose}><div className="form">
-  <div className="import-summary"><div className="import-total"><strong>{preview.residents.length}</strong><span>moradores válidos</span></div><div className="import-source"><b>{preview.fileName}</b><small>{preview.sourceLines||0} linhas analisadas</small></div></div>
-  <div className="import-stats"><div><b>{preview.news||0}</b><span>novos</span></div><div><b>{preview.updates||0}</b><span>atualizados</span></div><div><b>{preview.duplicates||0}</b><span>já cadastrados</span></div></div>
+  <div className="import-summary"><div className="import-total"><strong>{preview.residents.length}</strong><span>moradores encontrados</span></div><div className="import-source"><b>{preview.fileName}</b><small>{preview.sourceLines||0} linhas analisadas</small></div></div>
   <div className="import-blocks"><b>Distribuição por bloco</b>{blockEntries.length?blockEntries.map(([block,count])=><div className="import-block-row" key={block}><span>Bloco {block}</span><strong>{count}</strong></div>):<small>Nenhum bloco identificado.</small>}</div>
   {preview.warnings?.length>0&&<div className="import-warning"><b>⚠ {preview.warnings.length} linha(s) precisam de atenção</b><small>Foram encontradas linhas com observações como “se mudou”, “não mora” ou dados incompletos. Elas não serão gravadas automaticamente.</small><details><summary>Ver linhas ignoradas</summary><div className="import-warning-list">{preview.warnings.slice(0,30).map((line,i)=><div key={i}>{line}</div>)}{preview.warnings.length>30&&<small>... e mais {preview.warnings.length-30} linha(s)</small>}</div></details></div>}
   <div className="import-actions"><button onClick={onClose}>Cancelar</button><button className="primary" onClick={onConfirm}>Confirmar importação</button></div>
